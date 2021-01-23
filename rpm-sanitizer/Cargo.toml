@@ -1,0 +1,13 @@
+[package]
+name = "rpm-sanitizer"
+version = "0.1.0"
+authors = ["Demi Marie Obenour <athena@invisiblethingslab.com>"]
+edition = "2018"
+
+[dependencies]
+rpm = { version = "0.1.0", path = "../rpm" }
+rpm-syntax = { version = "0.1.0", path = "../rpm-syntax" }
+
+[[bin]]
+name = "rpm-sanitizer"
+path = "src/main.rs"
