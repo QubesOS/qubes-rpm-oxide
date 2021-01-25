@@ -3,5 +3,6 @@ members = [
    "rpm",
    "rpm-sanitizer",
    "rpm-sys",
-   "rpm-syntax",
+   "rpm-parser",
+   "openpgp-parser",
 ]

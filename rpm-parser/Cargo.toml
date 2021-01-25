@@ -1,5 +1,5 @@
 [package]
-name = "rpm-syntax"
+name = "rpm-parser"
 version = "0.1.0"
 authors = ["Demi Marie Obenour <athena@invisiblethingslab.com>"]
 edition = "2018"

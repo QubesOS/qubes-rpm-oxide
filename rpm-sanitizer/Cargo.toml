@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 rpm = { version = "0.1.0", path = "../rpm" }
-rpm-syntax = { version = "0.1.0", path = "../rpm-syntax" }
+openpgp-parser = { version = "0.1.0", path = "../openpgp-parser" }
 
 [[bin]]
 name = "rpm-sanitizer"
