@@ -5,3 +5,6 @@ authors = ["Demi Marie Obenour <athena@invisiblethingslab.com>"]
 edition = "2018"
 
 [dependencies]
+[features]
+std = ["alloc"]
+alloc = []

@@ -22,9 +22,52 @@
 
 #![forbid(missing_docs, unsafe_code)]
 #![deny(warnings)]
-pub mod openpgp;
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 pub mod buffer;
+pub mod packet;
+pub mod packet_types;
 //mod header;
+
+/// Errors that can occur during parsing
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Error {
+    /// First bit of the first byte of a packet is zero
+    PacketFirstBitZero,
+    /// Length field is too long
+    TooLong,
+    /// Packet is truncated
+    PrematureEOF,
+    /// Indefinite-length old format packet detected.  These are not supported.
+    IndefiniteLength,
+    /// Partial-length new format packet detected.  These are not supported.
+    PartialLength,
+    /// Bad tag
+    BadTag,
+    /// Trailing junk
+    TrailingJunk,
+    /// Bogus MPI
+    BadMPI,
+    /// Ill-formed signature
+    IllFormedSignature,
+    /// Unsupported algorithm
+    UnsupportedAlgorithm,
+    /// Insecure algorithm
+    InsecureAlgorithm,
+    /// Invalid algorithm (such as an encryption algorithm uesd for signatures)
+    InvalidAlgorithm,
+    /// Signature not valid yet
+    SignatureNotValidYet,
+    /// Signature expired
+    SignatureExpired,
+    /// Unsupported critical subpacket
+    UnsupportedCriticalSubpacket,
+}
+
+impl From<core::num::TryFromIntError> for Error {
+    fn from(_e: core::num::TryFromIntError) -> Error {
+        Error::TooLong
+    }
+}
 
 #[cfg(test)]
 mod tests {
