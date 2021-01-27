@@ -96,12 +96,13 @@ fn read_hash_algorithm<'a>(reader: &mut Reader<'a>) -> Result<u8, Error> {
         OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
         OPENPGP_HASH_INSECURE_RIPEMD160 |
+        // SHA224 is secure, but its security level is a bit low
+        OPENPGP_HASH_SHA224 => Err(Error::InsecureAlgorithm),
+        // Invalid algorithms
         OPENPGP_HASH_RESERVED1 |
         OPENPGP_HASH_RESERVED2 |
         OPENPGP_HASH_RESERVED3 |
         OPENPGP_HASH_RESERVED4 |
-        // SHA224 is secure, but its security level is a bit low
-        OPENPGP_HASH_SHA224 => Err(Error::InsecureAlgorithm),
         // Unknown algorithms
         _ => Err(Error::UnsupportedAlgorithm),
     }
