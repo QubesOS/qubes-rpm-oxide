@@ -39,6 +39,17 @@ pub struct Subpacket<'a> {
 /// Get a series of `lenlen` big-endian bytes as a [`u32`].  Fails if `lenlen`
 /// is larger than 4 **or** larger than `std::mem::size_of::<usize>()`.
 /// Therefore, the return value will always be less than `usize::MAX`.
+///
+/// ```rust
+/// # use openpgp_parser::{packet::get_be_u32, buffer::Reader};
+/// let mut reader = Reader::new(&[1, 2, 3, 4, 5]);
+/// assert!(get_be_u32(&mut reader, 5).is_err());
+/// assert_eq!(get_be_u32(&mut reader, 3).unwrap(), 0x10203);
+/// assert!(get_be_u32(&mut reader, 3).is_err());
+/// assert_eq!(get_be_u32(&mut reader, 1).unwrap(), 4);
+/// assert_eq!(reader.len(), 1);
+/// assert_eq!(reader.byte().unwrap(), 0x5);
+/// ```
 pub fn get_be_u32(reader: &mut Reader, lenlen: u8) -> Result<u32, Error> {
     reader.read(|reader| {
         let mut len = 0u32;
