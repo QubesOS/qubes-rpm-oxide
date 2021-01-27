@@ -108,10 +108,16 @@ fn read_hash_algorithm<'a>(reader: &mut Reader<'a>) -> Result<u8, Error> {
     }
 }
 
+struct SigInfo<'a> {
+    id: Option<&'a [u8]>,
+    creation_time: Option<u32>,
+    expiration_time: Option<u32>,
+}
+
 fn process_subpacket<'a>(
     subpacket: Subpacket<'a>,
     time: u32,
-    id: &mut Option<&'a [u8]>,
+    id: &mut SigInfo<'a>,
 ) -> Result<(), Error> {
     let tag = subpacket.tag();
     match tag {
@@ -141,6 +147,8 @@ fn process_subpacket<'a>(
         // RPM doesn’t handle revocation, so this is pointless.
         // GPG only generates this for certifications.
         SUBPACKET_REVOCABLE |
+        // We require this subpacket to be unhashed
+        SUBPACKET_ISSUER_KEYID |
         // useless, not generated
         SUBPACKET_PLACEHOLDER => {
             #[cfg(test)]
@@ -155,26 +163,33 @@ fn process_subpacket<'a>(
                 #[cfg(test)]
                 eprintln!("Bad timestamp!");
                 Err(Error::IllFormedSignature)
-            } else if time == 0 {
-                // time = 0 disables time checking
-                Ok(())
-            } else if tag == SUBPACKET_SIG_EXPIRATION_TIME && timestamp <= time {
-                Err(Error::SignatureExpired)
-            } else if tag == SUBPACKET_CREATION_TIME && timestamp > time {
-                Err(Error::SignatureNotValidYet)
+            } else if tag == SUBPACKET_SIG_EXPIRATION_TIME {
+                if id.expiration_time.is_some() {
+                    Err(Error::IllFormedSignature)
+                } else if time != 0 && timestamp >= time {
+                    Err(Error::SignatureExpired)
+                } else {
+                    id.expiration_time = Some(timestamp);
+                    Ok(())
+                }
             } else {
-                Ok(())
-            }
-        },
+                if id.creation_time.is_some() {
+                    Err(Error::IllFormedSignature)
+                } else if time != 0 && timestamp < time {
+                    Err(Error::SignatureNotValidYet)
+                } else {
+                    id.creation_time = Some(timestamp);
+                    Ok(())
+                }
             }
         },
         // RPM doesn’t care about this, but we do
         SUBPACKET_FINGERPRINT => {
             match subpacket.contents().as_untrusted_slice().split_first() {
-                Some((4, fpr)) if fpr.len() == 20 && id.is_none() => {
+                Some((4, fpr)) if fpr.len() == 20 && id.id.is_none() => {
                     #[cfg(test)]
                     eprintln!("Fingerprint is {:?}", fpr);
-                    *id = Some(&fpr[12..]);
+                    id.id = Some(&fpr[12..]);
                     Ok(())
                 }
                 _ => {
@@ -187,7 +202,6 @@ fn process_subpacket<'a>(
         // We reject unknown subpackets to make exploits against RPM less likely
         SUBPACKET_NOTATION |
         SUBPACKET_POLICY_URI |
-        SUBPACKET_ISSUER_KEYID |
         SUBPACKET_SIGNER_USER_ID | _ => Err(Error::UnsupportedCriticalSubpacket),
     }
 }
@@ -268,10 +282,10 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
             let _hash_algo = read_hash_algorithm(reader)?;
             #[cfg(test)]
             eprintln!("digest algo {}", _hash_algo);
-            let mut uid = None;
+            let mut siginfo = SigInfo { id: None, creation_time: None, expiration_time: None };
             packet::get_length_bytes(reader, 2)?.read_all(Error::TrailingJunk, |reader| {
                 while let Some(subpacket) = packet::Subpacket::subpacket(reader)? {
-                    process_subpacket(subpacket, timestamp, &mut uid)?
+                    process_subpacket(subpacket, timestamp, &mut siginfo)?
                 }
                 Ok(())
             })?;
@@ -284,7 +298,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
                 return Err(Error::IllFormedSignature);
             }
             let user_id = reader.get(8)?;
-            if let Some(uid) = uid {
+            if let Some(uid) = siginfo.id {
                 if user_id.as_untrusted_slice() != uid {
                     return Err(Error::IllFormedSignature);
                 }
