@@ -238,8 +238,9 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
 
                 // Prohibited algorithm
                 OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT |
-                // ECDSA requires v4 signatures
+                // ECDSA and EdDSA require v4 signatures
                 OPENPGP_PUBLIC_KEY_ECDSA |
+                OPENPGP_PUBLIC_KEY_EDDSA |
                 // Encryption algorithms
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY |
                 OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY |
