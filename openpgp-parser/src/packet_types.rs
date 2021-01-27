@@ -138,6 +138,9 @@ fn process_subpacket<'a>(
         SUBPACKET_SIGNATURE_TARGET |
         // only valid in subkey binding signatures
         SUBPACKET_EMBEDDED_SIGNATURE |
+        // RPM doesn’t handle revocation, so this is pointless.
+        // GPG only generates this for certifications.
+        SUBPACKET_REVOCABLE |
         // useless, not generated
         SUBPACKET_PLACEHOLDER => {
             #[cfg(test)]
@@ -163,12 +166,6 @@ fn process_subpacket<'a>(
                 Ok(())
             }
         },
-        SUBPACKET_REVOCABLE => match subpacket.contents().as_untrusted_slice() {
-            &[0]|&[1] => Ok(()),
-            _ =>{
-                #[cfg(test)]
-                eprintln!("Bad revokable subpacket!");
-                Err(Error::IllFormedSignature)
             }
         },
         // RPM doesn’t care about this, but we do
