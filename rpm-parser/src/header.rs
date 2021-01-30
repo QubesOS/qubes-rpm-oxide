@@ -41,7 +41,7 @@ pub fn parse_header_magic<'a>(data: &[u8; 16]) -> Result<(u32, u32)> {
     Ok((index_length, data_length))
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Flags {
     None,
     HeaderSig,
@@ -133,14 +133,34 @@ fn check_signature<'a>(
             }
             Ok(())
         }
-        Flags::HeaderSig | Flags::HeaderPayloadSig => match Signature::parse(body, 0) {
-            Ok(_) => Ok(()),
-            Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
-        },
+        Flags::HeaderSig | Flags::HeaderPayloadSig => {
+            let sig = match Signature::parse(body, 0) {
+                Ok(e) => e,
+                Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
+            };
+            match std::mem::replace(
+                if flags == Flags::HeaderSig {
+                    header_sig
+                } else {
+                    header_payload_sig
+                },
+                Some(sig),
+            ) {
+                Some(_) => bad_data!("more than one signature of the same type"),
+                None => Ok(()),
+            }
+        }
     }
 }
 
-fn check_immutable<'a>(tag: u32, ty: TagType, count: usize, body: Reader<'a>) -> Result<()> {
+fn check_immutable<'a>(
+    tag: u32,
+    ty: TagType,
+    count: usize,
+    body: Reader<'a>,
+    primary_payload_digest: &mut Option<Vec<u8>>,
+    payload_digest_algorithm: &mut Option<i32>,
+) -> Result<()> {
     fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
     fail_if!(tag > 0x7FFF, "type too large");
     match tag_type(tag) {
@@ -165,6 +185,40 @@ fn check_immutable<'a>(tag: u32, ty: TagType, count: usize, body: Reader<'a>) ->
             Err(_) => bad_data!("wrong length"), // RPM might make this an array in the future
             Ok(e) => e,
         });
+        let hash_len = openpgp_parser::packet_types::check_hash_algorithm(alg).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("bad algorithm {}: {:?}", alg, e),
+            )
+        })?;
+        if super::ffi::rpm_hash_len(alg) != hash_len.into() {
+            bad_data!("Unsupported hash algorithm {}", alg)
+        }
+        match primary_payload_digest {
+            None => bad_data!("no payload digest"),
+            Some(ref e) if e.len() == (2 * hash_len + 1).into() => {}
+            Some(_) => bad_data!("wrong payload digest length"),
+        }
+        *payload_digest_algorithm = Some(alg)
+    } else if tag == 5092 || tag == 5097 {
+        // payload digest
+        fail_if!(count != 1, "more than one payload digest?");
+        let (len, untrusted_slice) = (body.len(), body.as_untrusted_slice());
+        fail_if!(len & 1 == 0, "hex length not even");
+        assert_eq!(untrusted_slice[len - 1], 0);
+        for &i in &untrusted_slice[..len - 1] {
+            match i {
+                b'a'..=b'f' | b'0'..=b'9' => (),
+                _ => bad_data!("bad hex"),
+            }
+        }
+        if tag == 5092 {
+            assert!(
+                primary_payload_digest.is_none(),
+                "duplicate tags rejected earlier"
+            );
+            *primary_payload_digest = Some(untrusted_slice.to_owned())
+        }
     }
     Ok(())
 }
@@ -286,7 +340,7 @@ pub struct ImmutableHeader {
     /// The  header
     pub header: Header,
     /// The payload digest algorithm, if any
-    payload_digest_algorithm: Option<i32>,
+    pub payload_digest_algorithm: Option<i32>,
     /// The payload digest, if any
     pub payload_digest: Option<Vec<u8>>,
 }
@@ -453,7 +507,17 @@ fn load_header<'a>(r: &mut dyn Read, mut region_type: HeaderType<'a>) -> Result<
                 &mut *header_signature,
                 &mut *header_payload_signature,
             )?,
-            HeaderType::Immutable { .. } => check_immutable(tag, ty, count, buf)?,
+            HeaderType::Immutable {
+                ref mut primary_payload_digest,
+                ref mut payload_digest_algorithm,
+            } => check_immutable(
+                tag,
+                ty,
+                count,
+                buf,
+                &mut *primary_payload_digest,
+                &mut *payload_digest_algorithm,
+            )?,
         }
     }
     fail_if!(reader.len() != 0, "{} bytes of trailing junk", reader.len());
@@ -496,7 +560,19 @@ mod tests {
     fn parses_lua_rpm() {
         const S: &[u8] = include_bytes!("../../lua-5.4.2-1.fc33.x86_64.rpm");
         let mut r = &S[96..];
-        load_signature(&mut r).unwrap();
-        load_immutable(&mut r).unwrap();
+        let SignatureHeader {
+            header: _,
+            header_signature,
+            header_payload_signature,
+        } = load_signature(&mut r).unwrap();
+        assert!(header_signature.is_some());
+        assert!(header_payload_signature.is_some());
+        let ImmutableHeader {
+            header: _,
+            payload_digest,
+            payload_digest_algorithm,
+        } = load_immutable(&mut r).unwrap();
+        assert_eq!(payload_digest.unwrap().len(), 65);
+        assert_eq!(payload_digest_algorithm.unwrap(), 8);
     }
 }

@@ -5,6 +5,8 @@
 //!
 //! This library does not support building or installing RPM packages.  These
 //! features can be found in the `rpm` crate, which uses the system RPM library.
+
+#![deny(warnings)]
 use std;
 macro_rules! size_of {
     ($t:ty) => {

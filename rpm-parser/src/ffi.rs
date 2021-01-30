@@ -81,6 +81,10 @@ pub enum TagType {
     I18NString = 9,
 }
 
+pub fn rpm_hash_len(alg: i32) -> usize {
+    unsafe { rpmDigestLength(alg) }
+}
+
 pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
     if tag > 0x7FFF {
         return None;
