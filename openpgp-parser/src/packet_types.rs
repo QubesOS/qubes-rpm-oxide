@@ -5,7 +5,7 @@ use super::{
     packet::{self, Subpacket},
     Error,
 };
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// `Reader`.
@@ -34,17 +34,17 @@ pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<Reader<'a>, Error> {
 
 const OPENPGP_SIGNATURE_TYPE_BINARY: u8 = 0;
 
-const OPENPGP_HASH_INSECURE_MD5: u8 = 1;
-const OPENPGP_HASH_INSECURE_SHA1: u8 = 2;
-const OPENPGP_HASH_INSECURE_RIPEMD160: u8 = 3;
-const OPENPGP_HASH_RESERVED1: u8 = 4;
-const OPENPGP_HASH_RESERVED2: u8 = 5;
-const OPENPGP_HASH_RESERVED3: u8 = 6;
-const OPENPGP_HASH_RESERVED4: u8 = 7;
-const OPENPGP_HASH_SHA256: u8 = 8;
-const OPENPGP_HASH_SHA384: u8 = 9;
-const OPENPGP_HASH_SHA512: u8 = 10;
-const OPENPGP_HASH_SHA224: u8 = 11;
+const OPENPGP_HASH_INSECURE_MD5: i32 = 1;
+const OPENPGP_HASH_INSECURE_SHA1: i32 = 2;
+const OPENPGP_HASH_INSECURE_RIPEMD160: i32 = 3;
+const OPENPGP_HASH_RESERVED1: i32 = 4;
+const OPENPGP_HASH_RESERVED2: i32 = 5;
+const OPENPGP_HASH_RESERVED3: i32 = 6;
+const OPENPGP_HASH_RESERVED4: i32 = 7;
+const OPENPGP_HASH_SHA256: i32 = 8;
+const OPENPGP_HASH_SHA384: i32 = 9;
+const OPENPGP_HASH_SHA512: i32 = 10;
+const OPENPGP_HASH_SHA224: i32 = 11;
 
 // Public key algorithms
 const OPENPGP_PUBLIC_KEY_RSA: u8 = 1;
@@ -85,13 +85,14 @@ const SUBPACKET_SIGNATURE_TARGET: u8 = 31;
 const SUBPACKET_EMBEDDED_SIGNATURE: u8 = 32;
 const SUBPACKET_FINGERPRINT: u8 = 33;
 
-fn read_hash_algorithm<'a>(reader: &mut Reader<'a>) -> Result<u8, Error> {
-    let hash = reader.byte()?;
+/// Checks that a hash algorithm is secure; if it is, returns the length (in bytes) of the hash it
+/// generates.
+pub fn check_hash_algorithm(hash: i32) -> Result<u16, Error> {
     match hash {
         // Okay hash algorithms
-        OPENPGP_HASH_SHA256 |
-        OPENPGP_HASH_SHA384 |
-        OPENPGP_HASH_SHA512 => Ok(hash),
+        OPENPGP_HASH_SHA256 => Ok(32),
+        OPENPGP_HASH_SHA384 => Ok(48),
+        OPENPGP_HASH_SHA512 => Ok(64),
         // Insecure hash algorithms
         OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
@@ -108,16 +109,35 @@ fn read_hash_algorithm<'a>(reader: &mut Reader<'a>) -> Result<u8, Error> {
     }
 }
 
-struct SigInfo<'a> {
-    id: Option<&'a [u8]>,
+/// Information about a signature
+#[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
+pub struct SigInfo {
+    /// Hash algorithm
+    pub hash_alg: u8,
+    /// Public key algorithm
+    pub pkey_alg: u8,
+    /// Signer Key ID
+    pub key_id: [u8; 8],
+    /// Creation time
+    pub creation_time: Option<u32>,
+    /// Expiration time
+    pub expiration_time: Option<u32>,
+}
+
+struct InternalSigInfo {
+    /// Signer Key ID
+    id: Option<[u8; 8]>,
+    /// Creation time
     creation_time: Option<u32>,
+    /// Expiration time
     expiration_time: Option<u32>,
 }
 
 fn process_subpacket<'a>(
     subpacket: Subpacket<'a>,
     time: u32,
-    id: &mut SigInfo<'a>,
+    id: &mut InternalSigInfo,
 ) -> Result<(), Error> {
     let tag = subpacket.tag();
     match tag {
@@ -189,7 +209,7 @@ fn process_subpacket<'a>(
                 Some((4, fpr)) if fpr.len() == 20 && id.id.is_none() => {
                     #[cfg(test)]
                     eprintln!("Fingerprint is {:?}", fpr);
-                    id.id = Some(&fpr[12..]);
+                    id.id = Some(fpr[12..].try_into().expect("length is correct; qed"));
                     Ok(())
                 }
                 _ => {
@@ -207,7 +227,7 @@ fn process_subpacket<'a>(
 }
 
 /// Checks that `reader` holds a valid signature, emptying it if it does.
-pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(), Error> {
+pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     let tag = packet.tag();
     if tag != 2 {
@@ -220,7 +240,14 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
     let version = reader.byte()?;
     #[cfg(test)]
     eprintln!("Version is {}", version);
-    let pkey_algorithm;
+    let pkey_alg;
+    let hash_alg;
+    let key_id: [u8; 8];
+    let mut siginfo = InternalSigInfo {
+        id: None,
+        creation_time: None,
+        expiration_time: None,
+    };
     let mpis = match version {
         3 => {
             if reader.byte()? != 5 || reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
@@ -228,11 +255,21 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
                 eprintln!("Bad version 3 signature!");
                 return Err(Error::IllFormedSignature);
             }
-            // Skip the key ID and signature creation time
-            reader.get(12)?;
+            siginfo.creation_time = Some(u32::from_be_bytes(
+                reader
+                    .get(4)?
+                    .as_untrusted_slice()
+                    .try_into()
+                    .expect("length is correct"),
+            ));
+            key_id = reader
+                .get(8)?
+                .as_untrusted_slice()
+                .try_into()
+                .expect("length is correct; qed");
             // Get the public-key algorithm
-            pkey_algorithm = reader.byte()?;
-            let mpis = match pkey_algorithm {
+            pkey_alg = reader.byte()?;
+            let mpis = match pkey_alg {
                 OPENPGP_PUBLIC_KEY_RSA => 1,
                 OPENPGP_PUBLIC_KEY_DSA => 2,
 
@@ -251,7 +288,8 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY |
                 _ => return Err(Error::UnsupportedAlgorithm),
             };
-            read_hash_algorithm(reader)?;
+            hash_alg = reader.byte()?;
+            check_hash_algorithm(hash_alg.into())?;
             mpis
         }
         4 => {
@@ -259,8 +297,8 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
             if reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
                 return Err(Error::IllFormedSignature);
             }
-            pkey_algorithm = reader.byte()?;
-            let mpis = match pkey_algorithm {
+            pkey_alg = reader.byte()?;
+            let mpis = match pkey_alg {
                 OPENPGP_PUBLIC_KEY_RSA => 1,
                 // RPM does not support ECDSA
                 OPENPGP_PUBLIC_KEY_ECDSA => return Err(Error::UnsupportedAlgorithm),
@@ -279,11 +317,11 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
                 _ => return Err(Error::UnsupportedAlgorithm),
             };
             #[cfg(test)]
-            eprintln!("Signature algorithm is {}", pkey_algorithm);
-            let _hash_algo = read_hash_algorithm(reader)?;
+            eprintln!("Signature algorithm is {}", pkey_alg);
+            hash_alg = reader.byte()?;
+            check_hash_algorithm(hash_alg.into())?;
             #[cfg(test)]
-            eprintln!("digest algo {}", _hash_algo);
-            let mut siginfo = SigInfo { id: None, creation_time: None, expiration_time: None };
+            eprintln!("digest algo {}", hash_alg);
             packet::get_length_bytes(reader, 2)?.read_all(Error::TrailingJunk, |reader| {
                 while let Some(subpacket) = packet::Subpacket::subpacket(reader)? {
                     process_subpacket(subpacket, timestamp, &mut siginfo)?
@@ -298,12 +336,17 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
             if reader.get(4)?.as_untrusted_slice() != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
                 return Err(Error::IllFormedSignature);
             }
-            let user_id = reader.get(8)?;
+            let user_id: [u8; 8] = reader
+                .get(8)?
+                .as_untrusted_slice()
+                .try_into()
+                .expect("length is correct; qed");
             if let Some(uid) = siginfo.id {
-                if user_id.as_untrusted_slice() != uid {
+                if user_id != uid {
                     return Err(Error::IllFormedSignature);
                 }
             }
+            key_id = user_id;
             mpis
         }
         _ => return Err(Error::IllFormedSignature),
@@ -315,7 +358,13 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<(),
         read_mpi(reader)?;
     }
     match reader.is_empty() {
-        true => Ok(()),
+        true => Ok(SigInfo {
+            hash_alg,
+            pkey_alg,
+            creation_time: siginfo.creation_time,
+            expiration_time: siginfo.expiration_time,
+            key_id,
+        }),
         false => Err(Error::IllFormedSignature),
     }
 }

@@ -2,6 +2,12 @@
 //! crate on `crates.io`.
 
 use core::{convert::TryInto, mem::size_of};
+#[cfg(feature = "std")]
+impl From<EOFError> for std::io::Error {
+    fn from(EOFError: EOFError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF")
+    }
+}
 
 /// A reader for untrusted data.  No method on this type will ever panic.
 ///
@@ -15,6 +21,31 @@ pub struct Reader<'a> {
 /// Error indicating end-of-file
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct EOFError;
+
+macro_rules! gen_be_offset {
+    ($(#[$s:meta])* ($i: ident, $t: ty)) => {
+        $(#[$s])*
+        pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
+            let range = offset..offset.wrapping_add(size_of::<$t>());
+            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
+            // LLVM is able to optimize away the panic
+            Ok(<$t>::from_be_bytes(data.expect("length is correct")))
+        }
+    };
+}
+
+macro_rules! gen_le_offset {
+    ($(#[$s:meta])* ($i: ident, $t: ty)) => {
+        $(#[$s])*
+        #[inline]
+        pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
+            let range = offset..offset.wrapping_add(size_of::<$t>());
+            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
+            // LLVM is able to optimize away the panic
+            Ok(<$t>::from_le_bytes(data.expect("length is correct")))
+        }
+    }
+}
 
 impl<'a> Reader<'a> {
     /// Create a [`Reader`] from a slice of data.
@@ -95,106 +126,82 @@ impl<'a> Reader<'a> {
         self.untrusted_buffer
     }
 
-    /// Gets a little-endian `u16` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[5, 6, 7]);
-    /// assert_eq!(reader.le_u16(1).unwrap(), 0x706);
-    /// assert!(reader.le_u16(2).is_err());
-    /// assert!(reader.le_u16(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn le_u16(&self, offset: usize) -> Result<u16, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u16>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u16::from_le_bytes(data.expect("length is correct")))
+    gen_le_offset! {
+        /// Gets a little-endian `u16` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[5, 6, 7]);
+        /// assert_eq!(reader.le_u16_offset(1).unwrap(), 0x706);
+        /// assert!(reader.le_u16_offset(2).is_err());
+        /// assert!(reader.le_u16_offset(usize::max_value()).is_err());
+        /// ```
+        (le_u16_offset, u16)
     }
 
-    /// Gets a little-endian `u32` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
-    /// assert_eq!(reader.le_u32(1).unwrap(), 0x9080706);
-    /// assert!(reader.le_u32(2).is_err());
-    /// assert!(reader.le_u32(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn le_u32(&self, offset: usize) -> Result<u32, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u32>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u32::from_le_bytes(data.expect("length is correct")))
+    gen_le_offset! {
+        /// Gets a little-endian `u32` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
+        /// assert_eq!(reader.le_u32_offset(1).unwrap(), 0x9080706);
+        /// assert!(reader.le_u32_offset(2).is_err());
+        /// assert!(reader.le_u32_offset(usize::max_value()).is_err());
+        /// ```
+        (le_u32_offset, u32)
     }
 
-    /// Gets a little-endian `u64` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    /// assert_eq!(reader.le_u64(2).unwrap(), 0x908070605040302);
-    /// assert!(reader.le_u64(3).is_err());
-    /// assert!(reader.le_u64(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn le_u64(&self, offset: usize) -> Result<u64, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u64>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u64::from_le_bytes(data.expect("length is correct")))
+    gen_le_offset! {
+        /// Gets a little-endian `u64` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        /// assert_eq!(reader.le_u64_offset(2).unwrap(), 0x908070605040302);
+        /// assert!(reader.le_u64_offset(3).is_err());
+        /// assert!(reader.le_u64_offset(usize::max_value()).is_err());
+        /// ```
+        (le_u64_offset, u64)
     }
 
-    /// Gets a little-endian `u16` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[5, 6, 7]);
-    /// assert_eq!(reader.be_u16(1).unwrap(), 0x607);
-    /// assert!(reader.be_u16(2).is_err());
-    /// assert!(reader.be_u16(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn be_u16(&self, offset: usize) -> Result<u16, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u16>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u16::from_be_bytes(data.expect("length is correct")))
+    gen_be_offset! {
+        /// Gets a big-endian `u16` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[5, 6, 7]);
+        /// assert_eq!(reader.be_u16_offset(1).unwrap(), 0x607);
+        /// assert!(reader.be_u16_offset(2).is_err());
+        /// assert!(reader.be_u16_offset(usize::max_value()).is_err());
+        /// ```
+        (be_u16_offset, u16)
     }
 
-    /// Gets a little-endian `u32` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
-    /// assert_eq!(reader.be_u32(1).unwrap(), 0x6070809);
-    /// assert!(reader.be_u32(2).is_err());
-    /// assert!(reader.be_u32(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn be_u32(&self, offset: usize) -> Result<u32, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u32>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u32::from_be_bytes(data.expect("length is correct")))
+    gen_be_offset! {
+        /// Gets a little-endian `u32` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
+        /// assert_eq!(reader.be_u32_offset(1).unwrap(), 0x6070809);
+        /// assert!(reader.be_u32_offset(2).is_err());
+        /// assert!(reader.be_u32_offset(usize::max_value()).is_err());
+        /// ```
+        (be_u32_offset, u32)
     }
 
-    /// Gets a little-endian `u64` value
-    ///
-    /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
-    /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    /// assert_eq!(reader.be_u64(2).unwrap(), 0x203040506070809);
-    /// assert!(reader.be_u64(3).is_err());
-    /// assert!(reader.be_u64(usize::max_value()).is_err());
-    /// ```
-    #[inline]
-    pub fn be_u64(&self, offset: usize) -> Result<u64, EOFError> {
-        let range = offset..offset.wrapping_add(size_of::<u64>());
-        let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-        // LLVM is able to optimize away the panic
-        Ok(u64::from_be_bytes(data.expect("length is correct")))
+    gen_be_offset! {
+        /// Gets a little-endian `u64` value
+        ///
+        /// ```rust
+        /// # use openpgp_parser::buffer::Reader;
+        /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        /// assert_eq!(reader.be_u64_offset(2).unwrap(), 0x203040506070809);
+        /// assert!(reader.be_u64_offset(3).is_err());
+        /// assert!(reader.be_u64_offset(usize::max_value()).is_err());
+        /// ```
+        (be_u64_offset,u64)
     }
 
     /// Gets `len` bytes as a [`Reader`].
