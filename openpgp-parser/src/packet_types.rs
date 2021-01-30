@@ -323,7 +323,8 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             #[cfg(test)]
             eprintln!("digest algo {}", hash_alg);
             packet::get_length_bytes(reader, 2)?.read_all(Error::TrailingJunk, |reader| {
-                while let Some(subpacket) = packet::Subpacket::subpacket(reader)? {
+                while !reader.is_empty() {
+                    let subpacket = packet::Subpacket::subpacket(reader)?;
                     process_subpacket(subpacket, timestamp, &mut siginfo)?
                 }
                 Ok(())

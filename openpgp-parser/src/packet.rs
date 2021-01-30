@@ -214,15 +214,12 @@ impl<'a> Subpacket<'a> {
 
     /// Read a subpacket from `reader`.  Subpackets are always new-format
     /// and may be critical.
-    pub fn subpacket(reader: &mut Reader<'a>) -> Result<Option<Self>, Error> {
-        if reader.is_empty() {
-            return Ok(None);
-        }
+    pub fn subpacket(reader: &mut Reader<'a>) -> Result<Self, Error> {
         let mut buffer = get_varlen_bytes(reader)?;
         let tag = buffer.byte()?;
         #[cfg(test)]
         eprintln!("Tag byte is {}", tag);
-        Ok(Some(Subpacket { tag, buffer }))
+        Ok(Subpacket { tag, buffer })
     }
 
     /// Retrieves the packet’s tag
