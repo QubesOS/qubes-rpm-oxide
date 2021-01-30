@@ -120,7 +120,7 @@ pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
             buffer,
         }
     };
-    if packet.tag() != 0 {
+    if packet.tag & 0x3F != 0 {
         Ok(Some(packet))
     } else {
         Err(Error::BadTag)
@@ -129,8 +129,6 @@ pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
 
 impl<'a> Packet<'a> {
     /// Retrieves the packet’s tag.  Will always return non-zero.
-    // this is a lie; it can return zero in next(), but then the packet
-    // is immediately dropped.
     pub fn tag(&self) -> u8 {
         self.tag & 0x3F
     }
