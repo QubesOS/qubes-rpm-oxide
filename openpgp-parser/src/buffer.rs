@@ -267,7 +267,7 @@ impl<'a> Reader<'a> {
         /// ```
         (be_u16_offset, u16)
 
-        /// Gets a little-endian `u32` value
+        /// Gets a big-endian `u32` value
         ///
         /// ```rust
         /// # use openpgp_parser::buffer::Reader;
@@ -278,7 +278,7 @@ impl<'a> Reader<'a> {
         /// ```
         (be_u32_offset, u32)
 
-        /// Gets a little-endian `u64` value
+        /// Gets a big-endian `u64` value
         ///
         /// ```rust
         /// # use openpgp_parser::buffer::Reader;
