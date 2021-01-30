@@ -2,7 +2,7 @@
 members = [
    "rpm",
    "rpm-sanitizer",
-   "rpm-sys",
+   #"rpm-sys",
    "rpm-parser",
    "openpgp-parser",
 ]
