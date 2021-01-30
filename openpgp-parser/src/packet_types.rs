@@ -255,18 +255,8 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
                 eprintln!("Bad version 3 signature!");
                 return Err(Error::IllFormedSignature);
             }
-            siginfo.creation_time = Some(u32::from_be_bytes(
-                reader
-                    .get(4)?
-                    .as_untrusted_slice()
-                    .try_into()
-                    .expect("length is correct"),
-            ));
-            key_id = reader
-                .get(8)?
-                .as_untrusted_slice()
-                .try_into()
-                .expect("length is correct; qed");
+            siginfo.creation_time = Some(reader.be_u32()?);
+            key_id = u64::to_le_bytes(reader.le_u64()?);
             // Get the public-key algorithm
             pkey_alg = reader.byte()?;
             let mpis = match pkey_alg {
@@ -337,17 +327,10 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             if reader.get(4)?.as_untrusted_slice() != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
                 return Err(Error::IllFormedSignature);
             }
-            let user_id: [u8; 8] = reader
-                .get(8)?
-                .as_untrusted_slice()
-                .try_into()
-                .expect("length is correct; qed");
-            if let Some(uid) = siginfo.id {
-                if user_id != uid {
-                    return Err(Error::IllFormedSignature);
-                }
+            key_id = u64::to_le_bytes(reader.le_u64()?);
+            if siginfo.id.is_some() && siginfo.id != Some(key_id) {
+                return Err(Error::IllFormedSignature);
             }
-            key_id = user_id;
             mpis
         }
         _ => return Err(Error::IllFormedSignature),
