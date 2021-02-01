@@ -462,6 +462,7 @@ fn load_header<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DigestCtx;
     #[test]
     fn parses_header_magic() {
         assert_eq!(
@@ -492,7 +493,11 @@ mod tests {
             payload_digest,
             payload_digest_algorithm,
         } = load_immutable(&mut r).unwrap();
-        assert_eq!(payload_digest.unwrap().len(), 65);
+        let payload_digest = payload_digest.unwrap();
+        assert_eq!(payload_digest.len(), 65);
         assert_eq!(payload_digest_algorithm.unwrap(), 8);
+        let mut digest_ctx = DigestCtx::init(8).unwrap();
+        digest_ctx.update(r);
+        assert_eq!(digest_ctx.finalize(true), payload_digest);
     }
 }
