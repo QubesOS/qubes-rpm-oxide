@@ -42,3 +42,5 @@ macro_rules! fail_if {
 
 mod ffi;
 pub mod header;
+mod lead;
+pub use lead::read_lead;
