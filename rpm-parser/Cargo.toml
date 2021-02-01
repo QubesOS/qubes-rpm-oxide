@@ -6,3 +6,7 @@ edition = "2018"
 
 [dependencies]
 openpgp-parser = { path = "../openpgp-parser", version = "0.1.0", features = ["std"] }
+
+[[bin]]
+name = "rpmcheck"
+path = "bin/rpmcheck.rs"
