@@ -95,7 +95,13 @@ pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
         0x20000 => true,
         // This should probably be a panic, but RPM does define
         // RPM_MAPPING_RETURN_TYPE, so just fail.
-        _ => return None,
+        _ => {
+            if cfg!(test) && ty != 0 {
+                panic!("bad return from RPM")
+            } else {
+                return None;
+            }
+        }
     };
     Some((
         match ty & 0xffff {
