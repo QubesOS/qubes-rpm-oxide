@@ -43,4 +43,8 @@ macro_rules! fail_if {
 mod ffi;
 pub mod header;
 mod lead;
-pub use lead::read_lead;
+mod package;
+pub use header::Header as RPMHeader;
+pub use header::{load_immutable, load_signature};
+pub use lead::{read_lead, RPMLead};
+pub use package::RPMPackage;
