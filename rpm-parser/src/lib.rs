@@ -44,6 +44,7 @@ mod ffi;
 pub mod header;
 mod lead;
 mod package;
+pub use ffi::DigestCtx;
 pub use header::Header as RPMHeader;
 pub use header::{load_immutable, load_signature};
 pub use lead::{read_lead, RPMLead};
