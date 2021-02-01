@@ -1,5 +1,5 @@
 //! FFI code
-
+#[forbid(improper_ctypes)]
 pub use signatures::Signature;
 mod signatures {
     use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
