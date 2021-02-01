@@ -163,12 +163,28 @@ pub struct SignatureHeader {
 
 /// A parsed RPM immutable header
 pub struct ImmutableHeader {
-    /// The  header
+    /// The header
     pub header: Header,
-    /// The payload digest algorithm, if any
-    pub payload_digest_algorithm: Option<i32>,
-    /// The payload digest, if any
-    pub payload_digest: Option<Vec<u8>>,
+    payload_digest: Option<Vec<u8>>,
+    payload_digest_algorithm: Option<u8>,
+}
+
+impl ImmutableHeader {
+    /// Gets a digest context for the package payload, along with the hex digest
+    /// to verify it against.
+    pub fn payload_digest(&self) -> Result<(crate::DigestCtx, Vec<u8>)> {
+        let alg = match self.payload_digest_algorithm {
+            None => bad_data!("No payload digest algorithm"),
+            Some(e) => e,
+        };
+        let ctx = crate::DigestCtx::init(alg).expect("algorithm already validated");
+        let digest = self
+            .payload_digest
+            .as_ref()
+            .expect("payload digest algorithms with no digests rejected earlier")
+            .clone();
+        Ok((ctx, digest))
+    }
 }
 
 pub fn read_header(r: &mut dyn Read) -> Result<(u32, u32)> {

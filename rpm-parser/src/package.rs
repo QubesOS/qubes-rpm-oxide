@@ -48,12 +48,8 @@ mod tests {
         } = signature;
         assert!(header_signature.is_some());
         assert!(header_payload_signature.is_some());
-        let ImmutableHeader {
-            header: _,
-            payload_digest,
-            payload_digest_algorithm,
-        } = immutable;
-        assert_eq!(payload_digest.unwrap().len(), 65);
-        assert_eq!(payload_digest_algorithm.unwrap(), 8);
+        let (mut ctx, digest) = immutable.payload_digest().unwrap();
+        ctx.update(s);
+        assert_eq!(ctx.finalize(true), digest);
     }
 }

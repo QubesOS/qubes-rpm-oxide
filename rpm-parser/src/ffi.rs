@@ -131,6 +131,17 @@ mod digests {
         }
     }
 
+    impl std::io::Write for DigestCtx {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.update(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     impl DigestCtx {
         /// Initialize an RPM digest context
         pub fn init(algorithm: u8) -> Result<DigestCtx, ()> {
