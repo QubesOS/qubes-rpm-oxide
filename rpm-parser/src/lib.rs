@@ -20,5 +20,25 @@ macro_rules! align_of {
     };
 }
 
+macro_rules! bad_data {
+    ($i:expr) => {
+        return Err($crate::std::io::Error::new($crate::std::io::ErrorKind::InvalidData, $i))
+    };
+    ($($i:expr),*) => {
+        return Err($crate::std::io::Error::new($crate::std::io::ErrorKind::InvalidData, format!($($i),*)))
+    };
+    ($($i:expr),*,) => {
+        bad_data!($($i),*)
+    };
+}
+
+macro_rules! fail_if {
+    ($c:expr, $($i:expr),*$(,)?) => {
+        if $c {
+            bad_data!($($i),*)
+        }
+    }
+}
+
 mod ffi;
 pub mod header;
