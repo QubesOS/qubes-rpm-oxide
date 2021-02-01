@@ -333,7 +333,8 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
                 Some(ref e) if e.len() == (2 * hash_len + 1).into() => {}
                 Some(_) => bad_data!("wrong payload digest length"),
             }
-            payload_digest_algorithm = Some(alg)
+            payload_digest_algorithm =
+                Some(alg.try_into().expect("invalid algorithm rejected above"))
         } else if tag == 5092 || tag == 5097 {
             // payload digest
             fail_if!(tag_data.count() != 1, "more than one payload digest?");

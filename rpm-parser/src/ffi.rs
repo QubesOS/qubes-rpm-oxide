@@ -1,17 +1,43 @@
 //! FFI code
 #[forbid(improper_ctypes)]
-pub use signatures::Signature;
+use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
+
+/// An OpenPGP signature
+pub struct Signature {
+    sig: signatures::Signature,
+    ctx: DigestCtx,
+}
+
+impl Signature {
+    /// Parse an OpenPGP signature.  The signature is validated before being
+    /// passed to RPM.  If the time is not zero, the signature is checked to not
+    /// be from the future and to not have expired.
+    pub fn parse(buffer: Reader, time: u32) -> Result<Self, Error> {
+        let sig = signatures::Signature::parse(buffer, time)?;
+        let ctx =
+            DigestCtx::init(sig.hash_algorithm()).expect("Digest algorithm already validated");
+        Ok(Self { sig, ctx })
+    }
+
+    /// Update the sigatures’s internal digest context with data from `buf`.
+    pub fn update(&mut self, buf: &[u8]) {
+        self.ctx.update(buf)
+    }
+
+    pub fn public_key_algorithm(&self) -> u8 {
+        self.sig.public_key_algorithm()
+    }
+}
+
 mod signatures {
-    use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
+    use super::{read_signature, Error, Reader};
     use std::os::raw::{c_int, c_uint};
     enum RpmPgpDigParams {}
 
     #[repr(transparent)]
-    pub struct Signature(*mut RpmPgpDigParams);
+    pub(super) struct Signature(*mut RpmPgpDigParams);
 
     impl Signature {
-        /// Parse an OpenPGP signature.  The signature is validated before being passed
-        /// to RPM.
         pub fn parse(buffer: Reader, time: u32) -> Result<Self, Error> {
             let mut cp = buffer.clone();
             // Check that the signature is valid
@@ -26,13 +52,16 @@ mod signatures {
         }
 
         /// Retrieve the hash algorithm of the signature
-        pub fn hash_algorithm(&self) -> c_uint {
-            unsafe { pgpDigParamsAlgo(self.0, 9) }
+        pub fn hash_algorithm(&self) -> u8 {
+            let alg = unsafe { pgpDigParamsAlgo(self.0, 9) };
+            assert!(alg <= 255, "invalid hash algorithm not rejected earlier?");
+            alg as _
         }
 
         /// Retrieve the public key algorithm of the signature
-        pub fn public_key_algorithm(&self) -> c_uint {
-            unsafe { pgpDigParamsAlgo(self.0, 6) }
+        pub fn public_key_algorithm(&self) -> u8 {
+            use std::convert::TryInto;
+            unsafe { pgpDigParamsAlgo(self.0, 6) }.try_into().expect("OpenPGP public key algorithms are stored in a single byte, so they always fit in a u8; qed")
         }
     }
 
