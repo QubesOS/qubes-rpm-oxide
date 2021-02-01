@@ -1,11 +1,22 @@
 //! FFI code
 #[forbid(improper_ctypes)]
 use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
+use std::sync::Once;
 
 /// An OpenPGP signature
 pub struct Signature {
     sig: signatures::Signature,
     ctx: DigestCtx,
+}
+
+static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
+
+fn init() {
+    #[link(name = "rpmio")]
+    extern "C" {
+        fn rpmInitCrypto() -> std::os::raw::c_int;
+    }
+    RPM_CRYPTO_INIT_ONCE.call_once(|| assert_eq!(unsafe { rpmInitCrypto() }, 0))
 }
 
 impl Signature {
@@ -29,161 +40,8 @@ impl Signature {
     }
 }
 
-mod signatures {
-    use super::{read_signature, Error, Reader};
-    use std::os::raw::{c_int, c_uint};
-    enum RpmPgpDigParams {}
-
-    #[repr(transparent)]
-    pub(super) struct Signature(*mut RpmPgpDigParams);
-
-    impl Signature {
-        pub fn parse(buffer: Reader, time: u32) -> Result<Self, Error> {
-            let mut cp = buffer.clone();
-            // Check that the signature is valid
-            read_signature(&mut cp, time)?;
-            // We can now pass the buffer to RPM, since it is a valid signature
-            let slice = buffer.as_untrusted_slice();
-            let mut params = Signature(std::ptr::null_mut());
-            let r = unsafe { pgpPrtParams(slice.as_ptr(), slice.len(), 2, &mut params) };
-            assert!(r == 0, "we accepted a signature RPM rejected");
-            assert!(!params.0.is_null());
-            Ok(params)
-        }
-
-        /// Retrieve the hash algorithm of the signature
-        pub fn hash_algorithm(&self) -> u8 {
-            let alg = unsafe { pgpDigParamsAlgo(self.0, 9) };
-            assert!(alg <= 255, "invalid hash algorithm not rejected earlier?");
-            alg as _
-        }
-
-        /// Retrieve the public key algorithm of the signature
-        pub fn public_key_algorithm(&self) -> u8 {
-            use std::convert::TryInto;
-            unsafe { pgpDigParamsAlgo(self.0, 6) }.try_into().expect("OpenPGP public key algorithms are stored in a single byte, so they always fit in a u8; qed")
-        }
-    }
-
-    impl Drop for Signature {
-        fn drop(&mut self) {
-            if !self.0.is_null() {
-                self.0 = unsafe { pgpDigParamsFree(self.0) }
-            }
-        }
-    }
-
-    #[link(name = "rpmio")]
-    extern "C" {
-        fn pgpPrtParams(
-            pkts: *const u8,
-            pktlen: usize,
-            pkttype: c_uint,
-            ret: &mut Signature,
-        ) -> c_int;
-        fn pgpDigParamsFree(digp: *mut RpmPgpDigParams) -> *mut RpmPgpDigParams;
-        fn pgpDigParamsAlgo(digp: *const RpmPgpDigParams, algotype: c_uint) -> c_uint;
-    }
-}
-
-mod digests {
-    use std::os::raw::{c_int, c_void};
-    use std::{ptr, sync::Once};
-
-    enum ExternDigestCtx {}
-    #[repr(transparent)]
-    pub struct DigestCtx(*mut ExternDigestCtx);
-
-    #[link(name = "c")]
-    extern "C" {
-        fn free(ptr: *mut c_void);
-    }
-
-    #[link(name = "rpmio")]
-    extern "C" {
-        fn rpmInitCrypto() -> c_int;
-        fn rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
-        fn rpmDigestInit(hash_algo: c_int, flags: u32) -> DigestCtx;
-        fn rpmDigestUpdate(s: *mut ExternDigestCtx, data: *const c_void, len: usize) -> c_int;
-        fn rpmDigestFinal(
-            ctx: *mut ExternDigestCtx,
-            datap: Option<&mut *mut c_void>,
-            lenp: Option<&mut usize>,
-            asAscii: c_int,
-        ) -> c_int;
-    }
-
-    static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
-
-    fn init() {
-        RPM_CRYPTO_INIT_ONCE.call_once(|| assert_eq!(unsafe { rpmInitCrypto() }, 0))
-    }
-
-    impl Drop for DigestCtx {
-        fn drop(&mut self) {
-            unsafe { rpmDigestFinal(self.0, None, None, 0) };
-        }
-    }
-
-    impl Clone for DigestCtx {
-        fn clone(&self) -> Self {
-            unsafe { rpmDigestDup(self.0) }
-        }
-    }
-
-    impl std::io::Write for DigestCtx {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.update(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl DigestCtx {
-        /// Initialize an RPM digest context
-        pub fn init(algorithm: u8) -> Result<DigestCtx, ()> {
-            use openpgp_parser::packet_types::check_hash_algorithm;
-            init();
-            let len = check_hash_algorithm(algorithm.into()).map_err(drop)?;
-            #[cfg(test)]
-            eprintln!("Hash algorithm {} accepted by us", algorithm);
-            if super::rpm_hash_len(algorithm.into()) != len.into() {
-                return Err(());
-            }
-            #[cfg(test)]
-            eprintln!("Hash algorithm {} accepted by librpm", algorithm);
-            let raw_p = unsafe { rpmDigestInit(algorithm.into(), 0) };
-            assert!(!raw_p.0.is_null());
-            Ok(raw_p)
-        }
-
-        pub fn update(&mut self, buf: &[u8]) {
-            unsafe { assert_eq!(rpmDigestUpdate(self.0, buf.as_ptr() as _, buf.len()), 0) }
-        }
-
-        pub fn finalize(self, ascii: bool) -> Vec<u8> {
-            let mut p = ptr::null_mut();
-            let this = self.0;
-            // avoid double-free
-            std::mem::forget(self);
-            let mut len = 0;
-            unsafe {
-                assert_eq!(
-                    rpmDigestFinal(this, Some(&mut p), Some(&mut len), ascii as _),
-                    0
-                );
-                let mut retval: Vec<u8> = Vec::with_capacity(len);
-                ptr::copy_nonoverlapping(p as *const u8, retval.as_mut_ptr(), len);
-                retval.set_len(len);
-                free(p);
-                retval
-            }
-        }
-    }
-}
+mod digests;
+mod signatures;
 
 pub use digests::DigestCtx;
 
