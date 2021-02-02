@@ -6,7 +6,7 @@
 mod common;
 use super::ffi::{tag_type, Signature, TagType};
 use super::TagData;
-use common::{load_header, HeaderType};
+use common::load_header;
 pub use common::{Header, RPM_HDRMAGIC};
 use openpgp_parser::buffer::Reader;
 use std::convert::TryInto;
@@ -180,7 +180,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
             }
         }
     };
-    let header = load_header(r, HeaderType::Signature, &mut cb)?;
+    let header = load_header(r, 62, &mut cb)?;
     let remainder = header.data.len() & 7;
     if remainder != 0 {
         let mut s = [0u8; 7];
@@ -319,7 +319,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
         }
         Ok(())
     };
-    let header = load_header(r, HeaderType::Immutable, &mut cb)?;
+    let header = load_header(r, 63, &mut cb)?;
     match (name, os, arch, version, release) {
         (Some(name), Some(os), Some(arch), Some(version), Some(release)) => Ok(ImmutableHeader {
             header,

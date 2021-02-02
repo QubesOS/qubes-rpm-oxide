@@ -21,11 +21,6 @@ pub struct Header {
     pub data: Vec<u8>,
 }
 
-pub(super) enum HeaderType {
-    Signature,
-    Immutable,
-}
-
 pub fn parse_header_magic<'a>(data: &[u8; 16]) -> Result<(u32, u32)> {
     if data[..8] != RPM_HDRMAGIC[..] {
         return Err(Error::new(ErrorKind::InvalidData, "wrong header magic"));
@@ -67,7 +62,7 @@ const TAG_REGISTRY: &[(TagType, usize, Option<usize>)] = &[
 
 pub(super) fn load_header<'a>(
     r: &mut dyn Read,
-    region_type: HeaderType,
+    region_tag: u32,
     cb: &mut dyn FnMut(TagType, &TagData, Reader<'_>) -> Result<()>,
 ) -> Result<Header> {
     let (index_length, data_length) = read_header(r)?;
@@ -83,12 +78,9 @@ pub(super) fn load_header<'a>(
     {
         bad_data!("bad region trailer location {:?}", region)
     }
-    let mut last_tag = match region_type {
-        HeaderType::Signature => 62,
-        HeaderType::Immutable => 63,
-    };
-    if last_tag != region.tag() {
-        bad_data!("bad region kind {}, expected {}", region.tag(), last_tag,)
+    let mut last_tag = region.tag();
+    if last_tag != region_tag {
+        bad_data!("bad region kind {}, expected {}", last_tag, region_tag)
     };
     {
         let mut trailer_array = [TagData::default()];
