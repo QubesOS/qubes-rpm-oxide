@@ -24,22 +24,45 @@ impl RPMPackage {
         let lead = read_lead(r)?;
         let signature = load_signature(r)?;
         let immutable = load_immutable(r)?;
-        if Some(lead.osnum()) != os_to_osnum(&immutable.os) {
+        let (osnum, archnum) = (
+            os_to_osnum(immutable.os.as_bytes()),
+            arch_to_archnum(immutable.arch.as_bytes()),
+        );
+        if Some(lead.osnum()) != osnum {
             bad_data!(
                 "Wrong OS number in lead (expected {}, found {:?})",
                 lead.osnum(),
-                os_to_osnum(&immutable.os)
+                osnum
             )
-        } else if Some(lead.archnum()) != arch_to_archnum(&immutable.arch) {
+        } else if Some(lead.archnum()) != archnum {
             bad_data!(
                 "Wrong arch number in lead (expected {}, found {:?})",
                 lead.archnum(),
-                arch_to_archnum(&immutable.arch)
+                archnum
             )
         }
-        let len_to_compare = immutable.name.len().min(65);
-        if immutable.name[..len_to_compare] != lead.name()[..len_to_compare] {
-            bad_data!("name in lead does not match name in header")
+        let ImmutableHeader {
+            ref name,
+            ref version,
+            ref release,
+            epoch,
+            ..
+        } = immutable;
+        let full_name = match epoch {
+            Some(epoch) => format!("{}-{}:{}-{}", name, epoch, version, release),
+            None => format!("{}-{}-{}", name, version, release),
+        };
+        let len_to_compare = full_name.len().min(65);
+        debug_assert_eq!(lead.name()[65], 0);
+        if full_name.as_bytes()[..len_to_compare] != lead.name()[..len_to_compare]
+            || lead.name()[len_to_compare] != 0
+        {
+            bad_data!(
+                "name in lead {:?} does not match name in header {:?}",
+                std::str::from_utf8(&lead.name()[..len_to_compare])
+                    .expect("package names are valid UTF-8"),
+                &full_name[..len_to_compare]
+            )
         }
         Ok(Self {
             lead,

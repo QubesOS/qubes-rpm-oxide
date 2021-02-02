@@ -1,4 +1,4 @@
-use rpm_parser::{RPMPackage, TagData, TagType, DigestCtx};
+use rpm_parser::{DigestCtx, RPMPackage, TagData, TagType};
 use std::fs::File;
 use std::io::{copy, Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
 fn main() -> Result<()> {
@@ -39,15 +39,23 @@ fn main() -> Result<()> {
     s.read_exact(&mut out_data[..magic_offset])?;
     let tags = &[
         TagData::new(0x8eade801, 0, 3, (end_trailer - sig_offset) as _),
-        TagData::new(62, TagType::Bin as _, (trailer_offset - sig_offset) as _, 16),
+        TagData::new(
+            62,
+            TagType::Bin as _,
+            (trailer_offset - sig_offset) as _,
+            16,
+        ),
         TagData::new(256 + 12, TagType::Bin as _, 0, sig_len as _),
         TagData::new(256 + 17, TagType::String as _, sig_len as _, 1),
     ];
     let trailer = &[TagData::new(62, TagType::Bin as _, (-48i32) as u32, 16)];
     let immutable_header = package.immutable.header;
-    let immutable_magic = &[
-        TagData::new(0x8eade801, 0, immutable_header.index.len() as _, immutable_header.data.len() as _),
-    ];
+    let immutable_magic = &[TagData::new(
+        0x8eade801,
+        0,
+        immutable_header.index.len() as _,
+        immutable_header.data.len() as _,
+    )];
     out_data[magic_offset..sig_offset].copy_from_slice(TagData::as_bytes(&*tags));
     out_data[sig_offset..digest_offset].copy_from_slice(&*untrusted_sig_body);
     let mut hdr_digest = DigestCtx::init(8).expect("SHA-256 is supported");

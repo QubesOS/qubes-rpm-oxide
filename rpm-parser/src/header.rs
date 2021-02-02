@@ -175,11 +175,17 @@ pub struct ImmutableHeader {
     /// The header
     pub header: Header,
     /// The package name
-    pub name: Vec<u8>,
+    pub name: String,
+    /// The package version
+    pub version: String,
+    /// The package release
+    pub release: String,
+    /// The package epoch, if any
+    pub epoch: Option<u32>,
     /// The package target operating system
-    pub os: Vec<u8>,
+    pub os: String,
     /// The package architecture
-    pub arch: Vec<u8>,
+    pub arch: String,
     payload_digest: Option<Vec<u8>>,
     payload_digest_algorithm: Option<u8>,
 }
@@ -323,7 +329,10 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
 pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
     let mut payload_digest_algorithm = None;
     let mut payload_digest: Option<Vec<u8>> = None;
-    let mut name: Option<Vec<u8>> = None;
+    let mut name: Option<String> = None;
+    let mut version = None;
+    let mut release = None;
+    let mut epoch = None;
     let mut os = None;
     let mut arch = None;
     let mut cb = |ty: TagType, tag_data: &TagData, body: Reader<'_>| -> Result<()> {
@@ -383,19 +392,54 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             // package name
             1000 => {
                 name = Some(
-                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                    String::from_utf8(
+                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
+                    )
+                    .expect("String header checked to be valid UTF-8"),
                 )
+            }
+            // package version
+            1001 => {
+                version = Some(
+                    String::from_utf8(
+                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
+                    )
+                    .expect("String header checked to be valid UTF-8"),
+                )
+            }
+            // package release
+            1002 => {
+                release = Some(
+                    String::from_utf8(
+                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
+                    )
+                    .expect("String header checked to be valid UTF-8"),
+                )
+            }
+            // package epoch
+            1003 => {
+                let epoch_ = body
+                    .be_u32_offset(0)
+                    .expect("we checked earlier that the count is correct");
+                fail_if!(epoch_ > i32::MAX as u32, "Epoch {} too large", epoch_);
+                epoch = Some(epoch_)
             }
             // package os
             1021 => {
                 os = Some(
-                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                    String::from_utf8(
+                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
+                    )
+                    .expect("String header checked to be valid UTF-8"),
                 )
             }
             // package architecture
             1022 => {
                 arch = Some(
-                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                    String::from_utf8(
+                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
+                    )
+                    .expect("String header checked to be valid UTF-8"),
                 )
             }
             _ => {}
@@ -403,16 +447,19 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
         Ok(())
     };
     let header = load_header(r, HeaderType::Immutable, &mut cb)?;
-    match (name, os, arch) {
-        (Some(name), Some(os), Some(arch)) => Ok(ImmutableHeader {
+    match (name, os, arch, version, release) {
+        (Some(name), Some(os), Some(arch), Some(version), Some(release)) => Ok(ImmutableHeader {
             header,
             payload_digest_algorithm,
             payload_digest,
             name,
+            version,
+            release,
+            epoch,
             os,
             arch,
         }),
-        _ => bad_data!("Missing name, OS, or arch"),
+        _ => bad_data!("Missing name, OS, arch, version, or release"),
     }
 }
 
@@ -512,7 +559,11 @@ fn load_header<'a>(
                 if dup_count != 0 {
                     bad_data!("Entry {:?} is a too long string array", entry)
                 }
-                reader.get(len).expect("length is in bounds; qed")
+                let r = reader.get(len).expect("length is in bounds; qed");
+                match std::str::from_utf8(r.as_untrusted_slice()) {
+                    Ok(_) => r,
+                    Err(e) => bad_data!("String entry is not valid UTF-8: {}", e),
+                }
             }
         };
         cursor += buf.len();
@@ -556,15 +607,21 @@ mod tests {
             payload_digest,
             payload_digest_algorithm,
             name,
+            version,
+            release,
+            epoch,
             os,
             arch,
         } = load_immutable(&mut r).unwrap();
         let payload_digest = payload_digest.unwrap();
         assert_eq!(payload_digest.len(), 65);
         assert_eq!(payload_digest_algorithm.unwrap(), 8);
-        assert_eq!(&name, b"lua");
-        assert_eq!(&os, b"linux");
-        assert_eq!(&arch, b"x86_64");
+        assert_eq!(&*name, "lua");
+        assert_eq!(&*version, "5.4.2");
+        assert_eq!(&*release, "1.fc33");
+        assert_eq!(epoch, None);
+        assert_eq!(&*os, "linux");
+        assert_eq!(&*arch, "x86_64");
         let mut digest_ctx = DigestCtx::init(8).unwrap();
         digest_ctx.update(r);
         assert_eq!(digest_ctx.finalize(true), payload_digest);
