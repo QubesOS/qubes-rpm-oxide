@@ -109,15 +109,9 @@ impl ImmutableHeader {
 
 /// Check that a `Reader` is a properly formatted hex string.  Assert that
 /// it is NUL-terminated.
-fn check_hex(body: Reader<'_>) -> Result<()> {
-    let (len, untrusted_body) = (body.len(), body.as_untrusted_slice());
-    fail_if!(len & 1 == 0, "hex length not even");
-    assert_eq!(
-        untrusted_body[len - 1],
-        0,
-        "missing NUL termination not caught earlier"
-    );
-    for &i in &untrusted_body[..len - 1] {
+fn check_hex(untrusted_body: &[u8]) -> Result<()> {
+    fail_if!(untrusted_body.len() & 1 != 0, "hex length not even");
+    for &i in untrusted_body {
         match i {
             b'a'..=b'f' | b'0'..=b'9' => (),
             _ => bad_data!("bad hex"),
@@ -159,7 +153,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
             }),
             Flags::HeaderDigest | Flags::PayloadDigest => {
                 // our lengths include the terminating NUL
-                check_hex(body)
+                check_hex(&body.as_untrusted_slice()[..body.len() - 1])
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
                 let sig = match Signature::parse(body.clone(), 0) {
@@ -256,7 +250,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             5092 | 5097 => {
                 // payload digest
                 fail_if!(tag_data.count() != 1, "more than one payload digest?");
-                check_hex(body.clone())?;
+                check_hex(&body.as_untrusted_slice()[..body.len() - 1])?;
                 if tag == 5092 {
                     assert!(payload_digest.is_none(), "duplicate tags rejected earlier");
                     payload_digest = Some(body.as_untrusted_slice().to_owned())
