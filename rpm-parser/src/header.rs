@@ -6,7 +6,7 @@ use super::ffi::{tag_type, Signature, TagType};
 use openpgp_parser::buffer::Reader;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
-const RPM_HDRMAGIC: [u8; 8] = [0x8e, 0xad, 0xe8, 0x01, 0x00, 0x00, 0x00, 0x00];
+pub const RPM_HDRMAGIC: [u8; 8] = [0x8e, 0xad, 0xe8, 0x01, 0x00, 0x00, 0x00, 0x00];
 
 pub fn parse_header_magic<'a>(data: &[u8; 16]) -> Result<(u32, u32)> {
     if data[..8] != RPM_HDRMAGIC[..] {
