@@ -165,9 +165,9 @@ pub struct SignatureHeader {
     /// The header
     pub header: Header,
     /// The header signature, if any
-    pub header_signature: Option<Signature>,
+    pub header_signature: Option<(Signature, Vec<u8>)>,
     /// The header+payload signature, if any
-    pub header_payload_signature: Option<Signature>,
+    pub header_payload_signature: Option<(Signature, Vec<u8>)>,
 }
 
 /// A parsed RPM immutable header
@@ -277,7 +277,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
                 check_hex(body)
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body, 0) {
+                let sig = match Signature::parse(body.clone(), 0) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };
@@ -287,7 +287,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
                     } else {
                         &mut header_payload_signature
                     },
-                    Some(sig),
+                    Some((sig, body.as_untrusted_slice().to_owned())),
                 ) {
                     Some(_) => bad_data!("more than one signature of the same type"),
                     None => Ok(()),
