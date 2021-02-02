@@ -79,6 +79,15 @@ mod tag {
     }
 
     impl TagData {
+        pub const fn new(tag: u32, ty: u32, offset: u32, count: u32) -> Self {
+            Self {
+                tag: u32::to_be(tag),
+                ty: u32::to_be(ty),
+                offset: u32::to_be(offset),
+                count: u32::to_be(count),
+            }
+        }
+
         /// Cast a slice of [`TagData`] to a slice of `u8`, without copying
         pub fn as_bytes<'a>(slice: &'a [Self]) -> &'a [u8] {
             // Static assertions
