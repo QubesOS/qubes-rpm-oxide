@@ -285,11 +285,9 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             }
             // package epoch
             1003 => {
-                let epoch_ = body
-                    .be_u32_offset(0)
-                    .expect("we checked earlier that the count is correct");
-                fail_if!(epoch_ > i32::MAX as u32, "Epoch {} too large", epoch_);
-                epoch = Some(epoch_)
+                let epoch_ = body.be_u32_offset(0).expect("this is a i32 tag; qed") as i32;
+                fail_if!(epoch_ < 0, "negative epoch {} not allowed", epoch_);
+                epoch = Some(epoch_ as u32)
             }
             // package os
             1021 => {
