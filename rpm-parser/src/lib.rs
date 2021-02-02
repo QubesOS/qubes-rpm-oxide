@@ -41,11 +41,11 @@ macro_rules! fail_if {
 }
 
 mod ffi;
-pub mod header;
+mod header;
 mod lead;
 mod package;
-pub use ffi::DigestCtx;
+pub use ffi::{DigestCtx, TagType};
 pub use header::Header as RPMHeader;
-pub use header::{load_immutable, load_signature};
+pub use header::{load_immutable, load_signature, TagData, RPM_HDRMAGIC};
 pub use lead::{read_lead, RPMLead};
 pub use package::RPMPackage;
