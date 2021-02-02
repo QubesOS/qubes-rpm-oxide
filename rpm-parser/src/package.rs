@@ -16,12 +16,31 @@ pub struct RPMPackage {
     pub immutable: ImmutableHeader,
 }
 
+include!("tables.rs");
+
 impl RPMPackage {
     /// Load a package from `r`
     pub fn read(r: &mut dyn Read) -> Result<Self> {
         let lead = read_lead(r)?;
         let signature = load_signature(r)?;
         let immutable = load_immutable(r)?;
+        if Some(lead.osnum()) != os_to_osnum(&immutable.os) {
+            bad_data!(
+                "Wrong OS number in lead (expected {}, found {:?})",
+                lead.osnum(),
+                os_to_osnum(&immutable.os)
+            )
+        } else if Some(lead.archnum()) != arch_to_archnum(&immutable.arch) {
+            bad_data!(
+                "Wrong arch number in lead (expected {}, found {:?})",
+                lead.archnum(),
+                arch_to_archnum(&immutable.arch)
+            )
+        }
+        let len_to_compare = immutable.name.len().min(65);
+        if immutable.name[..len_to_compare] != lead.name()[..len_to_compare] {
+            bad_data!("name in lead does not match name in header")
+        }
         Ok(Self {
             lead,
             signature,

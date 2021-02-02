@@ -174,6 +174,12 @@ pub struct SignatureHeader {
 pub struct ImmutableHeader {
     /// The header
     pub header: Header,
+    /// The package name
+    pub name: Vec<u8>,
+    /// The package target operating system
+    pub os: Vec<u8>,
+    /// The package architecture
+    pub arch: Vec<u8>,
     payload_digest: Option<Vec<u8>>,
     payload_digest_algorithm: Option<u8>,
 }
@@ -317,6 +323,9 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
 pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
     let mut payload_digest_algorithm = None;
     let mut payload_digest: Option<Vec<u8>> = None;
+    let mut name: Option<Vec<u8>> = None;
+    let mut os = None;
+    let mut arch = None;
     let mut cb = |ty: TagType, tag_data: &TagData, body: Reader<'_>| -> Result<()> {
         let tag = tag_data.tag();
         fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
@@ -336,47 +345,75 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
                 )
             }
         }
-        if tag == 5093 {
-            // payload digest algorithm
-            assert_eq!(ty, TagType::Int32);
-            let alg = i32::from_be_bytes(match body.as_untrusted_slice().try_into() {
-                Err(_) => bad_data!("wrong length"), // RPM might make this an array in the future
-                Ok(e) => e,
-            });
-            let hash_len =
-                openpgp_parser::packet_types::check_hash_algorithm(alg).map_err(|e| {
-                    Error::new(
-                        ErrorKind::InvalidData,
-                        format!("bad algorithm {}: {:?}", alg, e),
-                    )
-                })?;
-            if super::ffi::rpm_hash_len(alg) != hash_len.into() {
-                bad_data!("Unsupported hash algorithm {}", alg)
+        match tag {
+            5093 => {
+                // payload digest algorithm
+                assert_eq!(ty, TagType::Int32);
+                let alg = i32::from_be_bytes(match body.as_untrusted_slice().try_into() {
+                    Err(_) => bad_data!("wrong length"), // RPM might make this an array in the future
+                    Ok(e) => e,
+                });
+                let hash_len =
+                    openpgp_parser::packet_types::check_hash_algorithm(alg).map_err(|e| {
+                        Error::new(
+                            ErrorKind::InvalidData,
+                            format!("bad algorithm {}: {:?}", alg, e),
+                        )
+                    })?;
+                if super::ffi::rpm_hash_len(alg) != hash_len.into() {
+                    bad_data!("Unsupported hash algorithm {}", alg)
+                }
+                match payload_digest {
+                    None => bad_data!("no payload digest"),
+                    Some(ref e) if e.len() == (2 * hash_len + 1).into() => {}
+                    Some(_) => bad_data!("wrong payload digest length"),
+                }
+                payload_digest_algorithm =
+                    Some(alg.try_into().expect("invalid algorithm rejected above"))
             }
-            match payload_digest {
-                None => bad_data!("no payload digest"),
-                Some(ref e) if e.len() == (2 * hash_len + 1).into() => {}
-                Some(_) => bad_data!("wrong payload digest length"),
+            5092 | 5097 => {
+                // payload digest
+                fail_if!(tag_data.count() != 1, "more than one payload digest?");
+                check_hex(body.clone())?;
+                if tag == 5092 {
+                    assert!(payload_digest.is_none(), "duplicate tags rejected earlier");
+                    payload_digest = Some(body.as_untrusted_slice().to_owned())
+                }
             }
-            payload_digest_algorithm =
-                Some(alg.try_into().expect("invalid algorithm rejected above"))
-        } else if tag == 5092 || tag == 5097 {
-            // payload digest
-            fail_if!(tag_data.count() != 1, "more than one payload digest?");
-            check_hex(body.clone())?;
-            if tag == 5092 {
-                assert!(payload_digest.is_none(), "duplicate tags rejected earlier");
-                payload_digest = Some(body.as_untrusted_slice().to_owned())
+            // package name
+            1000 => {
+                name = Some(
+                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                )
             }
+            // package os
+            1021 => {
+                os = Some(
+                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                )
+            }
+            // package architecture
+            1022 => {
+                arch = Some(
+                    body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_owned(),
+                )
+            }
+            _ => {}
         }
         Ok(())
     };
     let header = load_header(r, HeaderType::Immutable, &mut cb)?;
-    Ok(ImmutableHeader {
-        header,
-        payload_digest_algorithm,
-        payload_digest,
-    })
+    match (name, os, arch) {
+        (Some(name), Some(os), Some(arch)) => Ok(ImmutableHeader {
+            header,
+            payload_digest_algorithm,
+            payload_digest,
+            name,
+            os,
+            arch,
+        }),
+        _ => bad_data!("Missing name, OS, or arch"),
+    }
 }
 
 pub enum HeaderType {
@@ -518,10 +555,16 @@ mod tests {
             header: _,
             payload_digest,
             payload_digest_algorithm,
+            name,
+            os,
+            arch,
         } = load_immutable(&mut r).unwrap();
         let payload_digest = payload_digest.unwrap();
         assert_eq!(payload_digest.len(), 65);
         assert_eq!(payload_digest_algorithm.unwrap(), 8);
+        assert_eq!(&name, b"lua");
+        assert_eq!(&os, b"linux");
+        assert_eq!(&arch, b"x86_64");
         let mut digest_ctx = DigestCtx::init(8).unwrap();
         digest_ctx.update(r);
         assert_eq!(digest_ctx.finalize(true), payload_digest);

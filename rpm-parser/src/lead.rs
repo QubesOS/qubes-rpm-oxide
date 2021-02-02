@@ -9,38 +9,55 @@ use std::mem::{size_of, zeroed};
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct RPMLead {
-    pub magic: [u8; 4],
-    pub major: u8,
-    pub minor: u8,
-    pub ty: u16,
-    pub archnum: u16,
-    pub name: [u8; 65],
-    null: u8,
-    pub osnum: u16,
-    pub signature_type: u16,
-    pub reserved: [u8; 16],
+    magic: [u8; 4],
+    major: u8,
+    minor: u8,
+    ty: u16,
+    archnum: u16,
+    name: [u8; 66],
+    osnum: u16,
+    signature_type: u16,
+    reserved: [u8; 16],
+}
+
+impl RPMLead {
+    pub fn ty(&self) -> u16 {
+        self.ty.to_be()
+    }
+
+    pub fn archnum(&self) -> u16 {
+        self.archnum.to_be()
+    }
+
+    pub fn osnum(&self) -> u16 {
+        self.osnum.to_be()
+    }
+
+    pub fn signature_type(&self) -> u16 {
+        self.signature_type.to_be()
+    }
+    pub fn name(&self) -> &[u8] {
+        &self.name[..65]
+    }
 }
 
 pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
     let _: [u8; 96] = [0u8; size_of::<RPMLead>()];
     // FIXME replace with safe code
-    let mut lead = unsafe {
+    let lead = unsafe {
         let mut lead: RPMLead = zeroed();
         let ptr = &mut lead as *mut RPMLead as *mut u8;
         r.read_exact(std::slice::from_raw_parts_mut(ptr, size_of::<RPMLead>()))?;
         lead
     };
-    lead.ty = u16::from_be(lead.ty);
-    lead.archnum = u16::from_be(lead.archnum);
-    lead.osnum = u16::from_be(lead.osnum);
-    lead.signature_type = u16::from_be(lead.signature_type);
     fail_if!(lead.magic != [0xed, 0xab, 0xee, 0xdb], "not an RPM package");
     fail_if!(
-        lead.major != 3,
-        "unsupported RPM package version {}",
-        lead.major
+        lead.major != 3 || lead.minor != 0,
+        "unsupported RPM package version {}.{}",
+        lead.major,
+        lead.minor
     );
-    fail_if!(lead.ty > 1, "unknown package type {}", lead.ty);
+    fail_if!(lead.ty() > 1, "unknown package type {}", lead.ty());
     let mut seen_nul = false;
     for &i in &lead.name {
         match i {
@@ -50,12 +67,11 @@ pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
             _ => bad_data!("invalid package name"),
         }
     }
-    std::str::from_utf8(&lead.name).expect("already checked above");
-    fail_if!(lead.null != 0, "package name not NUL-terminated");
+    fail_if!(!seen_nul, "package name not NUL-terminated");
     fail_if!(
-        lead.signature_type != 5,
+        lead.signature_type() != 5,
         "unsupported signature type {}",
-        lead.signature_type
+        lead.signature_type()
     );
     fail_if!(
         lead.reserved != <[u8; 16]>::default(),
