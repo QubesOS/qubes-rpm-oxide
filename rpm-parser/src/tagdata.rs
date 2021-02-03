@@ -11,6 +11,7 @@ pub struct TagData {
 }
 
 impl TagData {
+    /// Creates a single [`TagData`] entry
     pub const fn new(tag: u32, ty: u32, offset: u32, count: u32) -> Self {
         Self {
             tag: u32::to_be(tag),
