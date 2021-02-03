@@ -394,5 +394,6 @@ mod tests {
         static EDDSA_SIG: &'static [u8] = include_bytes!("../../eddsa.asc");
         let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
         assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
+        assert_eq!(sig.creation_time(), 1611626266);
     }
 }
