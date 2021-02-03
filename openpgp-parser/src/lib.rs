@@ -26,7 +26,6 @@
 pub mod buffer;
 pub mod packet;
 pub mod packet_types;
-//mod header;
 
 /// Errors that can occur during parsing
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -66,13 +65,5 @@ pub enum Error {
 impl From<core::num::TryFromIntError> for Error {
     fn from(_e: core::num::TryFromIntError) -> Error {
         Error::TooLong
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
     }
 }
