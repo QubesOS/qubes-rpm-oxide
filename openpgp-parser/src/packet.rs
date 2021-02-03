@@ -129,4 +129,39 @@ impl<'a> Packet<'a> {
             Format::New
         }
     }
+
+    /// Wraps the packet in v4 encapsulation
+    #[cfg(feature = "alloc")]
+    pub fn serialize(&self) -> Vec<u8> {
+        let tag_byte = self.tag | 0b1100_0000u8;
+        let len = self.buffer.len();
+        match len {
+            0..=191 => {
+                // 1-byte
+                let mut v = Vec::with_capacity(2 + len);
+                v.push(tag_byte);
+                v.push(len as u8);
+                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v
+            }
+            192..=8383 => {
+                // 2-byte
+                let mut v = Vec::with_capacity(3 + len);
+                let len = len - 192;
+                v.push(tag_byte);
+                v.push((len >> 8) as u8 + 192);
+                v.push(len as u8);
+                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v
+            }
+            _ => {
+                // 5-byte
+                let mut v = Vec::with_capacity(6 + len);
+                v.push(tag_byte);
+                v.extend_from_slice(&(len as u32).to_be_bytes());
+                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v
+            }
+        }
+    }
 }
