@@ -116,6 +116,7 @@ pub struct SigInfo<'a> {
     hash_alg: u8,
     pkey_alg: u8,
     key_id: [u8; 8],
+    fingerprint: Option<[u8; 20]>,
     creation_time: u32,
     expiration_time: Option<u32>,
     packet: packet::Packet<'a>,
@@ -151,11 +152,17 @@ impl<'a> SigInfo<'a> {
     pub fn subpackets(&self) -> SubpacketIterator<'a> {
         self.subpackets.clone()
     }
+    /// Fingerprint, if provided
+    pub fn fingerprint(&self) -> Option<[u8; 20]> {
+        self.fingerprint
+    }
 }
 
 struct InternalSigInfo {
     /// Signer Key ID
     id: Option<[u8; 8]>,
+    /// Fingerprint
+    fpr: Option<[u8; 20]>,
     /// Creation time
     creation_time: Option<u32>,
     /// Expiration time
@@ -195,8 +202,6 @@ fn process_subpacket<'a>(
         // RPM doesn’t handle revocation, so this is pointless.
         // GPG only generates this for certifications.
         SUBPACKET_REVOCABLE |
-        // We require this subpacket to be unhashed
-        SUBPACKET_ISSUER_KEYID |
         // useless, not generated
         SUBPACKET_PLACEHOLDER => {
             #[cfg(test)]
@@ -231,13 +236,21 @@ fn process_subpacket<'a>(
                 }
             }
         },
+        SUBPACKET_ISSUER_KEYID => {
+            let buf = subpacket.contents().as_untrusted_slice();
+            if id.id.is_some() || buf.len() != 8 {
+                return Err(Error::IllFormedSignature)
+            }
+            id.id = Some(buf.try_into().expect("length is correct; qed"));
+            Ok(())
+        }
         // RPM doesn’t care about this, but we do
         SUBPACKET_FINGERPRINT => {
             match subpacket.contents().as_untrusted_slice().split_first() {
-                Some((4, fpr)) if fpr.len() == 20 && id.id.is_none() => {
+                Some((4, fpr)) if fpr.len() == 20 && id.fpr.is_none() => {
                     #[cfg(test)]
                     eprintln!("Fingerprint is {:?}", fpr);
-                    id.id = Some(fpr[12..].try_into().expect("length is correct; qed"));
+                    id.fpr = Some(fpr.try_into().expect("length is correct; qed"));
                     Ok(())
                 }
                 _ => {
@@ -273,6 +286,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
     let key_id: [u8; 8];
     let mut siginfo = InternalSigInfo {
         id: None,
+        fpr: None,
         creation_time: None,
         expiration_time: None,
     };
@@ -345,18 +359,28 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             for subpacket in subpackets.clone() {
                 process_subpacket(subpacket, timestamp, &mut siginfo)?
             }
-            // We treat unhashed subpackets specially: there must be exactly
-            // one, and it must be the issuer key ID.  This prevents an attacker
-            // from inserting a malicious unhashed subpacket.  We also check
-            // that the issuer key ID matches the fingerprint, if one is
-            // specified.
-            if reader.get(4)?.as_untrusted_slice() != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
-                return Err(Error::IllFormedSignature);
+            // The only non-hashed subpacket allowed is the key ID, and only if
+            // it has not already been seen.
+            key_id = match siginfo.id {
+                None => {
+                    if reader.get(4)?.as_untrusted_slice() != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
+                        return Err(Error::IllFormedSignature);
+                    }
+                    reader
+                        .get(8)?
+                        .as_untrusted_slice()
+                        .try_into()
+                        .expect("length correct")
+                }
+                Some(e) if reader.be_u16()? == 0 => e,
+                Some(_) => return Err(Error::IllFormedSignature),
+            };
+            if let Some(s) = siginfo.fpr {
+                if s[12..] != key_id[..] {
+                    return Err(Error::IllFormedSignature);
+                }
             }
-            key_id = u64::to_le_bytes(reader.le_u64()?);
-            if siginfo.id.is_some() && siginfo.id != Some(key_id) {
-                return Err(Error::IllFormedSignature);
-            }
+
             (subpackets, mpis)
         }
         _ => return Err(Error::IllFormedSignature),
@@ -381,6 +405,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             key_id,
             subpackets,
             packet,
+            fingerprint: siginfo.fpr,
         }),
         false => Err(Error::IllFormedSignature),
     }
@@ -395,5 +420,6 @@ mod tests {
         let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
         assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
         assert_eq!(sig.creation_time(), 1611626266);
+        assert_eq!(sig.fingerprint().unwrap()[12..], sig.key_id()[..]);
     }
 }
