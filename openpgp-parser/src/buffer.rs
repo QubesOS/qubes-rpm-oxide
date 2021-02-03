@@ -335,6 +335,35 @@ impl<'a> Reader<'a> {
         Ok(retval)
     }
 
+    /// Same as [`Self::read`], except that on success, it also returns a buffer
+    /// containing the bytes read.
+    ///
+    /// ```rust
+    /// # use openpgp_parser::{buffer::Reader, Error};
+    /// let mut reader = Reader::new(&[50, 6, 3]);
+    /// reader.read(|s| {
+    ///     s.get(3).unwrap(); // will succeed
+    ///     s.get(1) // fails
+    /// }).unwrap_err();
+    /// assert_eq!(reader.len(), 3); // the reader has not been changed
+    /// let (new_reader, ()) = reader.get_read::<_, Error, _>(|s| {
+    ///     s.get(2)?;
+    ///     s.get(1)?;
+    ///     Ok(())
+    /// }).unwrap();
+    /// assert!(reader.is_empty()); // reader has been changed
+    /// assert_eq!(new_reader.as_untrusted_slice(), &[50, 6, 3]);
+    /// ```
+    pub fn get_read<T, U, V: FnOnce(&mut Self) -> Result<T, U>>(
+        &mut self,
+        cb: V,
+    ) -> Result<(Self, T), U> {
+        let mut dup = self.clone();
+        let retval = cb(&mut dup)?;
+        let bytes_read = self.len() - dup.len();
+        Ok((self.get(bytes_read).expect("the length of a reader cannot increase, so bytes_read() will be positive and less than or equal to self.len(); qed"), retval))
+    }
+
     /// Call the given callback with a copy of `self`.  If the callback
     /// fails, return that error.  If the callback succeeds, it is expected to
     /// consume the whole buffer; otherwise, `trailing_junk` is returned.
