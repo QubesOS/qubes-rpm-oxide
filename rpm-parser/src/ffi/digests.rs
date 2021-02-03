@@ -49,7 +49,7 @@ impl std::io::Write for DigestCtx {
 impl DigestCtx {
     /// Initialize an RPM digest context
     pub fn init(algorithm: u8) -> Result<DigestCtx, ()> {
-        use openpgp_parser::packet_types::check_hash_algorithm;
+        use openpgp_parser::signature::check_hash_algorithm;
         super::init();
         let len = check_hash_algorithm(algorithm.into()).map_err(drop)?;
         #[cfg(test)]

@@ -1,6 +1,6 @@
 //! FFI code
-#[forbid(improper_ctypes)]
-use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
+#![forbid(improper_ctypes)]
+use openpgp_parser::{buffer::Reader, Error};
 
 /// An OpenPGP signature
 pub struct Signature {
@@ -125,7 +125,7 @@ mod tests {
     use super::*;
     #[test]
     fn check_rpm_supports_hashes() {
-        use openpgp_parser::packet_types::check_hash_algorithm;
+        use openpgp_parser::signature::check_hash_algorithm;
         for &i in &[8, 9, 10] {
             assert_eq!(
                 unsafe { rpmDigestLength(i) },

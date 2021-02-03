@@ -25,7 +25,7 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 pub mod buffer;
 pub mod packet;
-pub mod packet_types;
+pub mod signature;
 
 /// Errors that can occur during parsing
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

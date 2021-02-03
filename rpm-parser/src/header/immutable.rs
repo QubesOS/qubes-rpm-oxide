@@ -107,7 +107,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
                     Ok(e) => e,
                 });
                 let hash_len =
-                    openpgp_parser::packet_types::check_hash_algorithm(alg).map_err(|e| {
+                    openpgp_parser::signature::check_hash_algorithm(alg).map_err(|e| {
                         Error::new(
                             ErrorKind::InvalidData,
                             format!("bad algorithm {}: {:?}", alg, e),

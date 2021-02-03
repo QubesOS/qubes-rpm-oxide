@@ -1,11 +1,11 @@
-//! The various types of OpenPGP packets
+//! OpenPGP signatures
 
-use super::{
-    buffer::Reader,
-    packet::{self, Subpacket},
-    Error,
-};
+mod subpacket;
+
+use super::{buffer::Reader, packet, Error};
+
 use core::convert::{TryFrom, TryInto};
+pub use subpacket::{Subpacket, SubpacketIterator, Critical};
 
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// `Reader`.
@@ -110,9 +110,9 @@ pub fn check_hash_algorithm(hash: i32) -> Result<u16, Error> {
 }
 
 /// Information about a signature
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct SigInfo {
+pub struct SigInfo<'a> {
     /// Hash algorithm
     pub hash_alg: u8,
     /// Public key algorithm
@@ -123,6 +123,8 @@ pub struct SigInfo {
     pub creation_time: Option<u32>,
     /// Expiration time
     pub expiration_time: Option<u32>,
+    /// Hashed subpacket iterator
+    pub subpackets: SubpacketIterator<'a>,
 }
 
 struct InternalSigInfo {
@@ -227,7 +229,7 @@ fn process_subpacket<'a>(
 }
 
 /// Checks that `reader` holds a valid signature, emptying it if it does.
-pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo, Error> {
+pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo<'a>, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     let tag = packet.tag();
     if tag != 2 {
@@ -248,7 +250,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         creation_time: None,
         expiration_time: None,
     };
-    let mpis = match version {
+    let (subpackets, mpis) = match version {
         3 => {
             if reader.byte()? != 5 || reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
                 #[cfg(test)]
@@ -280,7 +282,8 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             };
             hash_alg = reader.byte()?;
             check_hash_algorithm(hash_alg.into())?;
-            mpis
+            let iter = SubpacketIterator::empty();
+            (iter, mpis)
         }
         4 => {
             // Signature type; we only allow OPENPGP_SIGNATURE_TYPE_BINARY
@@ -312,13 +315,10 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             check_hash_algorithm(hash_alg.into())?;
             #[cfg(test)]
             eprintln!("digest algo {}", hash_alg);
-            packet::get_length_bytes(reader, 2)?.read_all(Error::TrailingJunk, |reader| {
-                while !reader.is_empty() {
-                    let subpacket = packet::Subpacket::subpacket(reader)?;
-                    process_subpacket(subpacket, timestamp, &mut siginfo)?
-                }
-                Ok(())
-            })?;
+            let subpackets = subpacket::SubpacketIterator::read_u16_prefixed(reader)?;
+            for subpacket in subpackets.clone() {
+                process_subpacket(subpacket, timestamp, &mut siginfo)?
+            }
             // We treat unhashed subpackets specially: there must be exactly
             // one, and it must be the issuer key ID.  This prevents an attacker
             // from inserting a malicious unhashed subpacket.  We also check
@@ -331,7 +331,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             if siginfo.id.is_some() && siginfo.id != Some(key_id) {
                 return Err(Error::IllFormedSignature);
             }
-            mpis
+            (subpackets, mpis)
         }
         _ => return Err(Error::IllFormedSignature),
     };
@@ -348,6 +348,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             creation_time: siginfo.creation_time,
             expiration_time: siginfo.expiration_time,
             key_id,
+            subpackets,
         }),
         false => Err(Error::IllFormedSignature),
     }
