@@ -2,7 +2,7 @@
 
 use super::{check_hex, load_header, Header};
 use crate::ffi::{rpm_hash_len, tag_type, TagType};
-use crate::TagData;
+use crate::{RPMLead, TagData};
 use openpgp_parser::buffer::Reader;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
@@ -23,9 +23,12 @@ pub struct ImmutableHeader {
     pub os: String,
     /// The package architecture
     pub arch: String,
+    /// Is this a source package?
+    pub source: bool,
     pub(super) payload_digest: Option<Vec<u8>>,
     pub(super) payload_digest_algorithm: Option<u8>,
 }
+include!("../tables.rs");
 
 impl ImmutableHeader {
     /// Gets a digest context for the package payload, along with the hex digest
@@ -43,6 +46,27 @@ impl ImmutableHeader {
             .clone();
         Ok((ctx, digest))
     }
+
+    /// Retrieves the package lead
+    pub fn lead(&self) -> [u8; 96] {
+        let (osnum, archnum) = (
+            os_to_osnum(self.os.as_bytes()).unwrap_or(0),
+            arch_to_archnum(self.arch.as_bytes()).unwrap_or(0),
+        );
+        let Self {
+            ref name,
+            ref version,
+            ref release,
+            source,
+            epoch,
+            ..
+        } = self;
+        let full_name = match epoch {
+            Some(epoch) => format!("{}-{}:{}-{}", name, epoch, version, release),
+            None => format!("{}-{}-{}", name, version, release),
+        };
+        RPMLead::new(*source, archnum, osnum, full_name.as_bytes()).as_slice()
+    }
 }
 
 pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
@@ -53,6 +77,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
     let mut release = None;
     let mut epoch = None;
     let mut os = None;
+    let mut source = true;
     let mut arch = None;
     let mut cb = |ty: TagType, tag_data: &TagData, body: Reader<'_>| -> Result<()> {
         let tag = tag_data.tag();
@@ -159,6 +184,8 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
                     .expect("String header checked to be valid UTF-8"),
                 )
             }
+            // source RPM package built from
+            1044 => source = false,
             _ => {}
         }
         Ok(())
@@ -175,6 +202,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             epoch,
             os,
             arch,
+            source,
         }),
         _ => bad_data!("Missing name, OS, arch, version, or release"),
     }

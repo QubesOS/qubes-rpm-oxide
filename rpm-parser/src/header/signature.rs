@@ -62,6 +62,7 @@ pub struct SignatureHeader {
 }
 
 pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
+    let tok = crate::ffi::init();
     let mut header_signature = None;
     let mut header_payload_signature = None;
     if cfg!(test) {
@@ -97,7 +98,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
                 check_hex(&body.as_untrusted_slice()[..body.len() - 1])
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body.clone(), 0) {
+                let sig = match Signature::parse(body.clone(), 0, tok) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };

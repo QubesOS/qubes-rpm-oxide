@@ -7,7 +7,7 @@ mod common;
 mod immutable;
 mod signature;
 use common::load_header;
-pub use common::{Header, RPM_HDRMAGIC};
+pub use common::{parse_header_magic, Header, RPM_HDRMAGIC};
 pub use immutable::{load_immutable, ImmutableHeader};
 pub use signature::{load_signature, SignatureHeader};
 use std::io::Result;
@@ -50,6 +50,7 @@ mod tests {
             epoch,
             os,
             arch,
+            source,
         } = load_immutable(&mut r).unwrap();
         let payload_digest = payload_digest.unwrap();
         assert_eq!(payload_digest.len(), 65);
@@ -60,6 +61,7 @@ mod tests {
         assert_eq!(epoch, None);
         assert_eq!(&*os, "linux");
         assert_eq!(&*arch, "x86_64");
+        assert!(!source);
         let mut digest_ctx = DigestCtx::init(8).unwrap();
         digest_ctx.update(r);
         assert_eq!(digest_ctx.finalize(true), payload_digest);

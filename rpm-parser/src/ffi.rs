@@ -1,7 +1,6 @@
 //! FFI code
 #[forbid(improper_ctypes)]
 use openpgp_parser::{buffer::Reader, packet_types::read_signature, Error};
-use std::sync::Once;
 
 /// An OpenPGP signature
 pub struct Signature {
@@ -9,21 +8,31 @@ pub struct Signature {
     ctx: DigestCtx,
 }
 
-static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
+pub use init::{init, InitToken};
 
-fn init() {
-    #[link(name = "rpmio")]
-    extern "C" {
-        fn rpmInitCrypto() -> std::os::raw::c_int;
+mod init {
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    pub struct InitToken(());
+    pub fn init() -> InitToken {
+        use std::sync::Once;
+        static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
+        use std::os::raw::{c_char, c_int};
+        use std::ptr;
+        #[link(name = "rpm")]
+        extern "C" {
+            fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
+        }
+        RPM_CRYPTO_INIT_ONCE
+            .call_once(|| assert_eq!(unsafe { rpmReadConfigFiles(ptr::null(), ptr::null()) }, 0));
+        InitToken(())
     }
-    RPM_CRYPTO_INIT_ONCE.call_once(|| assert_eq!(unsafe { rpmInitCrypto() }, 0))
 }
 
 impl Signature {
     /// Parse an OpenPGP signature.  The signature is validated before being
     /// passed to RPM.  If the time is not zero, the signature is checked to not
     /// be from the future and to not have expired.
-    pub fn parse(buffer: Reader, time: u32) -> Result<Self, Error> {
+    pub fn parse(buffer: Reader, time: u32, _: InitToken) -> Result<Self, Error> {
         let sig = signatures::Signature::parse(buffer, time)?;
         let ctx =
             DigestCtx::init(sig.hash_algorithm()).expect("Digest algorithm already validated");
@@ -42,8 +51,10 @@ impl Signature {
 
 mod digests;
 mod signatures;
+mod transaction;
 
 pub use digests::DigestCtx;
+pub use transaction::{RpmKeyring, RpmTransactionSet};
 
 #[link(name = "rpm")]
 extern "C" {

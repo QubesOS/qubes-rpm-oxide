@@ -7,7 +7,7 @@ use std::io::{Read, Result};
 use std::mem::{size_of, zeroed};
 
 #[derive(Copy, Clone, Debug)]
-#[repr(C)]
+#[repr(packed)]
 pub struct RPMLead {
     magic: [u8; 4],
     major: u8,
@@ -21,6 +21,23 @@ pub struct RPMLead {
 }
 
 impl RPMLead {
+    pub(crate) fn new(ty: bool, archnum: u16, osnum: u16, name: &[u8]) -> Self {
+        let mut name_dup = [0u8; 66];
+        let bytes_to_copy = name.len().min(65);
+        name_dup[..bytes_to_copy].copy_from_slice(&name[..bytes_to_copy]);
+        Self {
+            magic: [0xed, 0xab, 0xee, 0xdb],
+            major: 3,
+            minor: 0,
+            ty: (ty as u16).to_be(),
+            archnum,
+            name: name_dup,
+            osnum,
+            signature_type: 5u16.to_be(),
+            reserved: [0; 16],
+        }
+    }
+
     pub fn ty(&self) -> u16 {
         self.ty.to_be()
     }
@@ -36,8 +53,14 @@ impl RPMLead {
     pub fn signature_type(&self) -> u16 {
         self.signature_type.to_be()
     }
+
     pub fn name(&self) -> &[u8] {
         &self.name[..]
+    }
+
+    pub fn as_slice(self) -> [u8; 96] {
+        // FIXME use safe code instead
+        unsafe { std::mem::transmute(self) }
     }
 }
 
