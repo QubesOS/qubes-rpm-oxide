@@ -1,4 +1,4 @@
-use openpgp_parser::{signature::read_signature, Error, buffer::Reader};
+use openpgp_parser::{buffer::Reader, signature::read_signature, Error};
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 

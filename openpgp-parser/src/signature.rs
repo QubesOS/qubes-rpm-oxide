@@ -5,7 +5,7 @@ mod subpacket;
 use super::{buffer::Reader, packet, Error};
 
 use core::convert::{TryFrom, TryInto};
-pub use subpacket::{Subpacket, SubpacketIterator, Critical};
+pub use subpacket::{Critical, Subpacket, SubpacketIterator};
 
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// `Reader`.

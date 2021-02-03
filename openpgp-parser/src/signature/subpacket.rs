@@ -148,7 +148,9 @@ impl<'a> SubpacketIterator<'a> {
 
     /// Returns an empty iterator
     pub fn empty() -> Self {
-        Self { buffer: Reader::empty() }
+        Self {
+            buffer: Reader::empty(),
+        }
     }
 }
 
