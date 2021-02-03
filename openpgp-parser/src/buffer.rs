@@ -314,12 +314,19 @@ impl<'a> Reader<'a> {
     /// succeeds, `self` is updated to match the copy.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::{buffer::Reader, Error};
     /// let mut reader = Reader::new(&[50, 6, 3]);
-    /// assert!(reader.get(5).is_err());
-    /// assert_eq!(reader.get(2).unwrap(), Reader::new(&[50, 6]));
-    /// assert_eq!(reader.get(1).unwrap(), Reader::new(&[3]));
-    /// assert!(reader.is_empty());
+    /// reader.read(|s| {
+    ///     s.get(3).unwrap(); // will succeed
+    ///     s.get(1) // fails
+    /// }).unwrap_err();
+    /// assert_eq!(reader.len(), 3); // the reader has not been changed
+    /// let () = reader.read::<_, Error, _>(|s| {
+    ///     s.get(2)?;
+    ///     s.get(1)?;
+    ///     Ok(())
+    /// }).unwrap();
+    /// assert!(reader.is_empty()); // reader has been changed
     /// ```
     pub fn read<T, U, V: FnOnce(&mut Self) -> Result<T, U>>(&mut self, cb: V) -> Result<T, U> {
         let mut dup = self.clone();
