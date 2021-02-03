@@ -113,18 +113,44 @@ pub fn check_hash_algorithm(hash: i32) -> Result<u16, Error> {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct SigInfo<'a> {
+    hash_alg: u8,
+    pkey_alg: u8,
+    key_id: [u8; 8],
+    creation_time: u32,
+    expiration_time: Option<u32>,
+    packet: packet::Packet<'a>,
+    subpackets: SubpacketIterator<'a>,
+}
+
+impl<'a> SigInfo<'a> {
     /// Hash algorithm
-    pub hash_alg: u8,
+    pub fn hash_alg(&self) -> u8 {
+        self.hash_alg
+    }
     /// Public key algorithm
-    pub pkey_alg: u8,
+    pub fn pkey_alg(&self) -> u8 {
+        self.pkey_alg
+    }
     /// Signer Key ID
-    pub key_id: [u8; 8],
+    pub fn key_id(&self) -> [u8; 8] {
+        self.key_id
+    }
     /// Creation time
-    pub creation_time: Option<u32>,
+    pub fn creation_time(&self) -> u32 {
+        self.creation_time
+    }
     /// Expiration time
-    pub expiration_time: Option<u32>,
-    /// Hashed subpacket iterator
-    pub subpackets: SubpacketIterator<'a>,
+    pub fn expiration_time(&self) -> Option<u32> {
+        self.expiration_time
+    }
+    /// The underlying packet
+    pub fn packet(&self) -> packet::Packet<'a> {
+        self.packet.clone()
+    }
+    /// Iterator over subpackets
+    pub fn subpackets(&self) -> SubpacketIterator<'a> {
+        self.subpackets.clone()
+    }
 }
 
 struct InternalSigInfo {
@@ -335,6 +361,11 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         }
         _ => return Err(Error::IllFormedSignature),
     };
+    // Check the creation time
+    let creation_time = match siginfo.creation_time {
+        Some(t) => t,
+        None => return Err(Error::NoCreationTime),
+    };
     // Ignore first 16 bits of hash
     reader.get(2)?;
     // Read the MPIs
@@ -345,10 +376,11 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         true => Ok(SigInfo {
             hash_alg,
             pkey_alg,
-            creation_time: siginfo.creation_time,
+            creation_time,
             expiration_time: siginfo.expiration_time,
             key_id,
             subpackets,
+            packet,
         }),
         false => Err(Error::IllFormedSignature),
     }
@@ -360,6 +392,7 @@ mod tests {
     #[test]
     fn parses_real_world_sig() {
         static EDDSA_SIG: &'static [u8] = include_bytes!("../../eddsa.asc");
-        read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
+        let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
+        assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
     }
 }

@@ -58,6 +58,8 @@ pub enum Error {
     SignatureNotValidYet,
     /// Signature expired
     SignatureExpired,
+    /// No creation time
+    NoCreationTime,
     /// Unsupported critical subpacket
     UnsupportedCriticalSubpacket,
 }
