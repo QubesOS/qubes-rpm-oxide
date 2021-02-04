@@ -205,13 +205,9 @@ fn process_subpacket<'a>(
         }
         SUBPACKET_SIG_EXPIRATION_TIME |
         SUBPACKET_CREATION_TIME => {
-            let mut buffer = subpacket.contents();
-            let timestamp = packet::get_be_u32(&mut buffer, 4)?;
-            if !buffer.is_empty() {
-                #[cfg(test)]
-                eprintln!("Bad timestamp!");
-                Err(Error::IllFormedSignature)
-            } else if tag == SUBPACKET_SIG_EXPIRATION_TIME {
+            let timestamp = subpacket.contents().try_into();
+            let timestamp = u32::from_be_bytes(timestamp.map_err(|_|Error::IllFormedSignature)?);
+            if tag == SUBPACKET_SIG_EXPIRATION_TIME {
                 if id.expiration_time.is_some() {
                     Err(Error::IllFormedSignature)
                 } else if time != 0 && timestamp >= time {
@@ -232,16 +228,15 @@ fn process_subpacket<'a>(
             }
         },
         SUBPACKET_ISSUER_KEYID => {
-            let buf = subpacket.contents().as_untrusted_slice();
-            if id.id.is_some() || buf.len() != 8 {
+            if id.id.is_some(){
                 return Err(Error::IllFormedSignature)
             }
-            id.id = Some(buf.try_into().expect("length is correct; qed"));
+            id.id = Some(subpacket.contents().try_into().map_err(|_| Error::IllFormedSignature)?);
             Ok(())
         }
         // RPM doesn’t care about this, but we do
         SUBPACKET_FINGERPRINT => {
-            match subpacket.contents().as_untrusted_slice().split_first() {
+            match subpacket.contents().split_first() {
                 Some((4, fpr)) if fpr.len() == 20 && id.fpr.is_none() => {
                     #[cfg(test)]
                     eprintln!("Fingerprint is {:?}", fpr);

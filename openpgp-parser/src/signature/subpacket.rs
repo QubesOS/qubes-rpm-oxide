@@ -75,9 +75,9 @@ impl<'a> Subpacket<'a> {
         }
     }
 
-    /// Obtain the contents of a subpacket as a [`Reader`].
-    pub fn contents(&self) -> Reader<'a> {
-        self.buffer.clone()
+    /// Obtain the contents of a subpacket as a slice
+    pub fn contents(&self) -> &'a [u8] {
+        self.buffer.as_untrusted_slice()
     }
 
     /// Returns the length of the contents
