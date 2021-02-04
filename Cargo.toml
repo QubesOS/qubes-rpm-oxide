@@ -1,8 +1,5 @@
 [workspace]
 members = [
-   "rpm",
-   "rpm-sanitizer",
-   #"rpm-sys",
    "rpm-parser",
    "openpgp-parser",
 ]
