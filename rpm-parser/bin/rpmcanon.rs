@@ -11,7 +11,6 @@ fn main() -> Result<()> {
     let token = rpm_parser::init();
     let tx = rpm_parser::RpmTransactionSet::new(token);
     let mut s = File::open(&args[1])?;
-    let mut dest = File::create(&args[2])?;
     // Ignore the lead
     let _ = rpm_parser::read_lead(&mut s)?;
     // Read the signature header
@@ -93,6 +92,7 @@ fn main() -> Result<()> {
     hdr_digest.update(&main_header_bytes);
     out_data[digest_offset..trailer_offset].copy_from_slice(&hdr_digest.finalize(true));
     out_data[trailer_offset..end_trailer].copy_from_slice(TagData::as_bytes(trailer));
+    let mut dest = File::create(&args[2])?;
     dest.write_all(&out_data)?;
     dest.write_all(&main_header_bytes)?;
     s.seek(SeekFrom::Start(
