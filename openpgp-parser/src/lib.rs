@@ -20,7 +20,7 @@
 //! - `std`: Features that require the standard library, such as I/O.  This
 //!   implies `alloc`.
 
-#![forbid(missing_docs, unsafe_code)]
+#![forbid(missing_docs, unsafe_code, deprecated)]
 #![deny(warnings)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 pub mod buffer;

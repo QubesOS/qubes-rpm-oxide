@@ -34,13 +34,14 @@ impl<'a> Subpacket<'a> {
     /// Subpacket::new(0x80, Critical::Yes, Reader::empty()).unwrap_err();
     /// ```
     pub fn parse(data: &'a [u8]) -> Result<Self, Error> {
-        let mut reader = Reader::new(data);
-        let tag = reader.byte()?;
-        let buffer = get_varlen_bytes(&mut reader)?;
-        match reader.is_empty() {
-            true => Ok(Subpacket { tag, buffer }),
-            false => Err(Error::TrailingJunk),
-        }
+        Reader::read_all(data, Error::PrematureEOF, |reader| {
+            let tag = reader.byte()?;
+            let buffer = get_varlen_bytes(reader)?;
+            Ok(Subpacket {
+                tag,
+                buffer: Reader::new(buffer),
+            })
+        })
     }
 
     /// Creates a subpacket from the specified byte slice, criticality, and tag.
@@ -87,9 +88,13 @@ impl<'a> Subpacket<'a> {
     /// Read a subpacket from `reader`.  Subpackets are always new-format
     /// and may be critical.
     pub fn subpacket(reader: &mut Reader<'a>) -> Result<Self, Error> {
-        let mut buffer = get_varlen_bytes(reader)?;
-        let tag = buffer.byte()?;
-        Ok(Subpacket { tag, buffer })
+        match get_varlen_bytes(reader)?.split_first() {
+            Some((&tag, buffer)) => Ok(Subpacket {
+                tag,
+                buffer: Reader::new(buffer),
+            }),
+            None => Err(Error::PrematureEOF),
+        }
     }
 
     /// Retrieves the packet’s tag
@@ -136,12 +141,13 @@ impl<'a> SubpacketIterator<'a> {
     pub fn read_u16_prefixed(buffer: &mut Reader<'a>) -> Result<Self, Error> {
         let buffer = buffer.read::<_, Error, _>(|buffer| {
             let len = buffer.be_u16()?;
-            let buffer = buffer.get(len.into())?;
-            let mut dup_buffer = buffer.clone();
-            while !dup_buffer.is_empty() {
-                let _ = Subpacket::subpacket(&mut dup_buffer)?;
-            }
-            Ok(buffer)
+            let untrusted = buffer.get_bytes(len.into())?;
+            Reader::read_all(untrusted, Error::TrailingJunk, |buf| {
+                Ok(while !buf.is_empty() {
+                    let _ = Subpacket::subpacket(buf)?;
+                })
+            })?;
+            Ok(Reader::new(untrusted))
         })?;
         Ok(SubpacketIterator { buffer })
     }

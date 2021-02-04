@@ -63,7 +63,7 @@ const TAG_REGISTRY: &[(TagType, usize, Option<usize>)] = &[
 pub(super) fn load_header<'a>(
     r: &mut dyn Read,
     region_tag: u32,
-    cb: &mut dyn FnMut(TagType, &TagData, Reader<'_>) -> Result<()>,
+    cb: &mut dyn FnMut(TagType, &TagData, &[u8]) -> Result<()>,
 ) -> Result<Header> {
     let (index_length, data_length) = read_header(r)?;
     let mut index = vec![Default::default(); index_length as _];
@@ -124,12 +124,12 @@ pub(super) fn load_header<'a>(
         if padding > align {
             bad_data!("Entry {:?} has too much padding ({})", entry, padding)
         }
-        if reader.get(padding)? != Reader::new(&[0u8; 8][..padding]) {
+        if reader.get_bytes(padding)? != &[0u8; 8][..padding] {
             bad_data!("Entry {:?} has padding that is not zeroed", entry)
         }
         cursor = offset;
         let buf = match size {
-            Some(s) => reader.get(s * count)?,
+            Some(s) => reader.get_bytes(s * count)?,
             None => {
                 if ty == TagType::String && count != 1 {
                     bad_data!("Entry {:?} is a string with nonunit count", entry)
@@ -148,8 +148,8 @@ pub(super) fn load_header<'a>(
                 if dup_count != 0 {
                     bad_data!("Entry {:?} is a too long string array", entry)
                 }
-                let r = reader.get(len).expect("length is in bounds; qed");
-                match std::str::from_utf8(r.as_untrusted_slice()) {
+                let r = reader.get_bytes(len).expect("length is in bounds; qed");
+                match std::str::from_utf8(r) {
                     Ok(_) => r,
                     Err(e) => bad_data!("String entry is not valid UTF-8: {}", e),
                 }

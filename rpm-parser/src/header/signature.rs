@@ -1,7 +1,6 @@
 use super::{check_hex, load_header, Header};
 use crate::ffi::{Signature, TagType};
 use crate::TagData;
-use openpgp_parser::buffer::Reader;
 use std::io::{Read, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -72,7 +71,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
             s = i.0;
         }
     }
-    let mut cb = |ty: TagType, tag_data: &TagData, body: Reader<'_>| {
+    let mut cb = |ty: TagType, tag_data: &TagData, body: &[u8]| {
         let tag = tag_data.tag();
         let (_, size, flags, _) = match RPM_SIG_TAGS.binary_search_by_key(&(tag, ty), |x| x.0) {
             Ok(e) => RPM_SIG_TAGS[e],
@@ -90,15 +89,15 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
         }
         match flags {
             Flags::HeaderPayloadDigest | Flags::None => Ok(()),
-            Flags::Zeroed => Ok(for &i in body.as_untrusted_slice() {
+            Flags::Zeroed => Ok(for &i in body {
                 fail_if!(i != 0, "padding not zeroed")
             }),
             Flags::HeaderDigest | Flags::PayloadDigest => {
                 // our lengths include the terminating NUL
-                check_hex(&body.as_untrusted_slice()[..body.len() - 1])
+                check_hex(&body[..body.len() - 1])
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body.clone(), 0, tok) {
+                let sig = match Signature::parse(body, 0, tok) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };
@@ -108,7 +107,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
                     } else {
                         &mut header_payload_signature
                     },
-                    Some((sig, body.as_untrusted_slice().to_owned())),
+                    Some((sig, body.to_owned())),
                 ) {
                     Some(_) => bad_data!("more than one signature of the same type"),
                     None => Ok(()),

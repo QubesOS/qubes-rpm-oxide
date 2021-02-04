@@ -3,7 +3,6 @@
 use super::{check_hex, load_header, Header};
 use crate::ffi::{rpm_hash_len, tag_type, TagType};
 use crate::{RPMLead, TagData};
-use openpgp_parser::buffer::Reader;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
 
@@ -79,7 +78,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
     let mut os = None;
     let mut source = true;
     let mut arch = None;
-    let mut cb = |ty: TagType, tag_data: &TagData, body: Reader<'_>| -> Result<()> {
+    let mut cb = |ty: TagType, tag_data: &TagData, body: &[u8]| -> Result<()> {
         let tag = tag_data.tag();
         fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
         fail_if!(tag > 0x7FFF, "type too large");
@@ -102,7 +101,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             5093 => {
                 // payload digest algorithm
                 assert_eq!(ty, TagType::Int32);
-                let alg = i32::from_be_bytes(match body.as_untrusted_slice().try_into() {
+                let alg = i32::from_be_bytes(match body.try_into() {
                     Err(_) => bad_data!("wrong length"), // RPM might make this an array in the future
                     Ok(e) => e,
                 });
@@ -127,61 +126,51 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             5092 | 5097 => {
                 // payload digest
                 fail_if!(tag_data.count() != 1, "more than one payload digest?");
-                check_hex(&body.as_untrusted_slice()[..body.len() - 1])?;
+                check_hex(&body[..body.len() - 1])?;
                 if tag == 5092 {
                     assert!(payload_digest.is_none(), "duplicate tags rejected earlier");
-                    payload_digest = Some(body.as_untrusted_slice().to_owned())
+                    payload_digest = Some(body.to_owned())
                 }
             }
             // package name
             1000 => {
                 name = Some(
-                    String::from_utf8(
-                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
-                    )
-                    .expect("String header checked to be valid UTF-8"),
+                    String::from_utf8(body[..body.len() - 1].to_vec())
+                        .expect("String header checked to be valid UTF-8"),
                 )
             }
             // package version
             1001 => {
                 version = Some(
-                    String::from_utf8(
-                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
-                    )
-                    .expect("String header checked to be valid UTF-8"),
+                    String::from_utf8(body[..body.len() - 1].to_vec())
+                        .expect("String header checked to be valid UTF-8"),
                 )
             }
             // package release
             1002 => {
                 release = Some(
-                    String::from_utf8(
-                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
-                    )
-                    .expect("String header checked to be valid UTF-8"),
+                    String::from_utf8(body[..body.len() - 1].to_vec())
+                        .expect("String header checked to be valid UTF-8"),
                 )
             }
             // package epoch
             1003 => {
-                let epoch_ = body.be_u32_offset(0).expect("this is a i32 tag; qed") as i32;
+                let epoch_ = i32::from_be_bytes(body.try_into().expect("this is a i32 tag; qed"));
                 fail_if!(epoch_ < 0, "negative epoch {} not allowed", epoch_);
                 epoch = Some(epoch_ as u32)
             }
             // package os
             1021 => {
                 os = Some(
-                    String::from_utf8(
-                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
-                    )
-                    .expect("String header checked to be valid UTF-8"),
+                    String::from_utf8(body[..body.len() - 1].to_vec())
+                        .expect("String header checked to be valid UTF-8"),
                 )
             }
             // package architecture
             1022 => {
                 arch = Some(
-                    String::from_utf8(
-                        body.as_untrusted_slice()[..body.as_untrusted_slice().len() - 1].to_vec(),
-                    )
-                    .expect("String header checked to be valid UTF-8"),
+                    String::from_utf8(body[..body.len() - 1].to_vec())
+                        .expect("String header checked to be valid UTF-8"),
                 )
             }
             // source RPM package built from

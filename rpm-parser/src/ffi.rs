@@ -1,10 +1,10 @@
 //! FFI code
 #![forbid(improper_ctypes)]
-use openpgp_parser::{buffer::Reader, Error};
+use openpgp_parser::Error;
 
 /// An OpenPGP signature
 pub struct Signature {
-    sig: signatures::Signature,
+    sig: RawSignature,
     ctx: DigestCtx,
 }
 
@@ -32,8 +32,8 @@ impl Signature {
     /// Parse an OpenPGP signature.  The signature is validated before being
     /// passed to RPM.  If the time is not zero, the signature is checked to not
     /// be from the future and to not have expired.
-    pub fn parse(buffer: Reader, time: u32, _: InitToken) -> Result<Self, Error> {
-        let sig = signatures::Signature::parse(buffer, time)?;
+    pub fn parse(untrusted_buffer: &[u8], time: u32, _: InitToken) -> Result<Self, Error> {
+        let sig = RawSignature::parse(untrusted_buffer, time)?;
         let ctx =
             DigestCtx::init(sig.hash_algorithm()).expect("Digest algorithm already validated");
         Ok(Self { sig, ctx })
@@ -52,6 +52,7 @@ impl Signature {
 mod digests;
 mod signatures;
 mod transaction;
+use signatures::Signature as RawSignature;
 
 pub use digests::DigestCtx;
 pub use transaction::{RpmKeyring, RpmTransactionSet};

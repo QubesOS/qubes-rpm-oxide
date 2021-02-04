@@ -16,7 +16,7 @@ pub enum Format {
 #[derive(Clone, Debug)]
 pub struct Packet<'a> {
     tag: u8,
-    buffer: Reader<'a>,
+    buffer: &'a [u8],
 }
 
 /// Get a series of `lenlen` big-endian bytes as a [`u32`].  Fails if `lenlen`
@@ -39,7 +39,7 @@ pub fn get_be_u32(reader: &mut Reader, lenlen: u8) -> Result<u32, Error> {
         if lenlen > 4 || usize::from(lenlen) > core::mem::size_of::<usize>() {
             return Err(Error::TooLong);
         }
-        for &i in reader.get(usize::from(lenlen))?.as_untrusted_slice() {
+        for &i in reader.get_bytes(usize::from(lenlen))? {
             len = len << 8 | u32::from(i)
         }
         Ok(len)
@@ -49,24 +49,24 @@ pub fn get_be_u32(reader: &mut Reader, lenlen: u8) -> Result<u32, Error> {
 /// Reads `lenlen` bytes of data as a `u32` using [`Self::get_be_u32`], then
 /// reads that number of bytes.  Returns [`Error::TooLong`] if `lenlen > 4`, or
 /// [`Error::PrematureEOF`] if `Self` is too short.
-pub fn get_length_bytes<'a>(reader: &mut Reader<'a>, lenlen: u8) -> Result<Reader<'a>, Error> {
+pub fn get_length_bytes<'a>(reader: &mut Reader<'a>, lenlen: u8) -> Result<&'a [u8], Error> {
     reader.read(|reader| {
         // `as` is harmless, as `get_be_u32` already checks that its return
         // value fits in a `usize`
         let len = get_be_u32(reader, lenlen)? as usize;
-        Ok(reader.get(len)?)
+        Ok(reader.get_bytes(len)?)
     })
 }
 
-pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<Reader<'a>, Error> {
+pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     let keybyte: u8 = reader.byte()?;
     #[cfg(test)]
     eprintln!("Keybyte is {}, reader length is {}", keybyte, reader.len());
     Ok(match keybyte {
-        0..=191 => reader.get(keybyte.into())?,
+        0..=191 => reader.get_bytes(keybyte.into())?,
         192..=223 => {
             let len = ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192;
-            reader.get(len)?
+            reader.get_bytes(len)?
         }
         // Partial lengths are deliberately unsupported, as we don’t handle PGP signed and/or
         // encrypted data ourselves.
@@ -79,7 +79,7 @@ pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<Reader<'a>
 ///
 /// - `Ok(Some(packet))` if a packet is read
 /// - `Ok(None)` if the reader is empty.
-/// - `Err` if an error occurred.
+/// - `Err` if an error occurred, such as trailing junk.
 pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
     let tagbyte: u8 = match reader.maybe_byte() {
         Some(e) if e & 0x80 == 0 => return Err(Error::PacketFirstBitZero),
@@ -116,9 +116,9 @@ impl<'a> Packet<'a> {
         self.tag & 0x3F
     }
 
-    /// Retrieves the packet’s contents as a `Reader`.
-    pub fn contents(&self) -> Reader<'a> {
-        self.buffer.clone()
+    /// Retrieves the packet’s contents as a slice.
+    pub fn contents(&self) -> &'a [u8] {
+        self.buffer
     }
 
     /// Retrieves the packet’s format
@@ -141,7 +141,7 @@ impl<'a> Packet<'a> {
                 let mut v = Vec::with_capacity(2 + len);
                 v.push(tag_byte);
                 v.push(len as u8);
-                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v.extend_from_slice(self.buffer);
                 v
             }
             192..=8383 => {
@@ -151,7 +151,7 @@ impl<'a> Packet<'a> {
                 v.push(tag_byte);
                 v.push((len >> 8) as u8 + 192);
                 v.push(len as u8);
-                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v.extend_from_slice(self.buffer);
                 v
             }
             _ => {
@@ -159,7 +159,7 @@ impl<'a> Packet<'a> {
                 let mut v = Vec::with_capacity(6 + len);
                 v.push(tag_byte);
                 v.extend_from_slice(&(len as u32).to_be_bytes());
-                v.extend_from_slice(self.buffer.as_untrusted_slice());
+                v.extend_from_slice(self.buffer);
                 v
             }
         }

@@ -1,4 +1,4 @@
-use openpgp_parser::{buffer::Reader, signature::read_signature, Error};
+use openpgp_parser::{signature, Error};
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
@@ -6,13 +6,12 @@ enum RpmPgpDigParams {}
 pub(super) struct Signature(*mut RpmPgpDigParams);
 
 impl Signature {
-    pub fn parse(buffer: Reader, time: u32) -> Result<Self, Error> {
+    pub fn parse(untrusted_buffer: &[u8], time: u32) -> Result<Self, Error> {
         super::init();
-        let mut cp = buffer.clone();
         // Check that the signature is valid
-        read_signature(&mut cp, time)?;
+        signature::parse(untrusted_buffer, time)?;
         // We can now pass the buffer to RPM, since it is a valid signature
-        let slice = buffer.as_untrusted_slice();
+        let slice = untrusted_buffer;
         let mut params = Signature(std::ptr::null_mut());
         let r = unsafe { pgpPrtParams(slice.as_ptr(), slice.len(), 2, &mut params) };
         assert!(r == 0, "we accepted a signature RPM rejected");

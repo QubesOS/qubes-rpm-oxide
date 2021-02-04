@@ -8,13 +8,13 @@ use core::convert::{TryFrom, TryInto};
 pub use subpacket::{Critical, Subpacket, SubpacketIterator};
 
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
-/// `Reader`.
-pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<Reader<'a>, Error> {
+/// slice.
+pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     reader.read(|reader| {
         let bits = packet::get_be_u32(reader, 2)? + 7;
-        let mpi_buf = reader.get(usize::try_from(bits)? >> 3)?;
+        let mpi_buf = reader.get_bytes(usize::try_from(bits)? >> 3)?;
         // don’t use ‘Reader::byte’, which mutates the reader
-        if let Some(first_byte) = mpi_buf.as_untrusted_slice().get(0) {
+        if let Some(first_byte) = mpi_buf.get(0) {
             // check that there are no spurious leading zeros
             // this is not valid for encrypted MPIs, but we don’t deal with
             // them, as we only parse signatures
@@ -119,7 +119,6 @@ pub struct SigInfo<'a> {
     fingerprint: Option<[u8; 20]>,
     creation_time: u32,
     expiration_time: Option<u32>,
-    packet: packet::Packet<'a>,
     subpackets: SubpacketIterator<'a>,
 }
 
@@ -143,10 +142,6 @@ impl<'a> SigInfo<'a> {
     /// Expiration time
     pub fn expiration_time(&self) -> Option<u32> {
         self.expiration_time
-    }
-    /// The underlying packet
-    pub fn packet(&self) -> packet::Packet<'a> {
-        self.packet.clone()
     }
     /// Iterator over subpackets
     pub fn subpackets(&self) -> SubpacketIterator<'a> {
@@ -267,7 +262,14 @@ fn process_subpacket<'a>(
     }
 }
 
-/// Checks that `reader` holds a valid signature, emptying it if it does.
+/// Parse a signature from a slice
+pub fn parse<'a>(data: &'a [u8], timestamp: u32) -> Result<SigInfo<'a>, Error> {
+    Reader::read_all(data, Error::TrailingJunk, |reader| {
+        read_signature(reader, timestamp)
+    })
+}
+
+/// Reads a signature from `reader`
 pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo<'a>, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     let tag = packet.tag();
@@ -276,8 +278,12 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         eprintln!("Tag is {} - this is not a signature!", tag);
         return Err(Error::IllFormedSignature);
     }
-    let mut reader = packet.contents();
-    let reader = &mut reader;
+    Reader::read_all(packet.contents(), Error::TrailingJunk, |e| {
+        parse_packet_body(e, timestamp)
+    })
+}
+
+fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo<'a>, Error> {
     let version = reader.byte()?;
     #[cfg(test)]
     eprintln!("Version is {}", version);
@@ -363,14 +369,10 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             // it has not already been seen.
             key_id = match siginfo.id {
                 None => {
-                    if reader.get(4)?.as_untrusted_slice() != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
+                    if reader.get_bytes(4)? != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
                         return Err(Error::IllFormedSignature);
                     }
-                    reader
-                        .get(8)?
-                        .as_untrusted_slice()
-                        .try_into()
-                        .expect("length correct")
+                    reader.get_bytes(8)?.try_into().expect("length correct")
                 }
                 Some(e) if reader.be_u16()? == 0 => e,
                 Some(_) => return Err(Error::IllFormedSignature),
@@ -391,7 +393,7 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         None => return Err(Error::NoCreationTime),
     };
     // Ignore first 16 bits of hash
-    reader.get(2)?;
+    reader.get_bytes(2)?;
     // Read the MPIs
     for _ in 0..mpis {
         read_mpi(reader)?;
@@ -404,7 +406,6 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
             expiration_time: siginfo.expiration_time,
             key_id,
             subpackets,
-            packet,
             fingerprint: siginfo.fpr,
         }),
         false => Err(Error::IllFormedSignature),
@@ -417,6 +418,18 @@ mod tests {
     #[test]
     fn parses_real_world_sig() {
         static EDDSA_SIG: &'static [u8] = include_bytes!("../../eddsa.asc");
+        static TRAILING_JUNK: &'static [u8] = include_bytes!("../../trailing-junk.asc");
+        assert_eq!(TRAILING_JUNK.len(), EDDSA_SIG.len() + 1);
+        assert_eq!(
+            Reader::read_all(TRAILING_JUNK, Error::TrailingJunk, |r| read_signature(r, 0)
+                .map(drop))
+            .unwrap_err(),
+            Error::TrailingJunk
+        );
+        assert_eq!(
+            read_signature(&mut Reader::new(&EDDSA_SIG[..EDDSA_SIG.len() - 1]), 0).unwrap_err(),
+            Error::PrematureEOF
+        );
         let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
         assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
         assert_eq!(sig.creation_time(), 1611626266);

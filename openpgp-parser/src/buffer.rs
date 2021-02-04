@@ -39,7 +39,7 @@ macro_rules! gen_le {
         $(#[$s])*
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
-            let Self { untrusted_buffer } = self.get(size_of::<$t>())?;
+            let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
             // LLVM is able to optimize away the panic
             Ok(<$t>::from_le_bytes(untrusted_buffer.try_into().expect("length is correct")))
         }
@@ -51,7 +51,7 @@ macro_rules! gen_be {
         $(#[$s])*
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
-            let Self { untrusted_buffer } = self.get(size_of::<$t>())?;
+            let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
             // LLVM is able to optimize away the panic
             Ok(<$t>::from_be_bytes(untrusted_buffer.try_into().expect("length is correct")))
         }
@@ -290,23 +290,45 @@ impl<'a> Reader<'a> {
         (be_u64_offset,u64)
     }
 
-    /// Gets `len` bytes as a [`Reader`].
+    /// Gets `len` bytes as a byte slice.  Mostly useful when processing the
+    /// data manually.
     ///
     /// ```rust
     /// # use openpgp_parser::buffer::Reader;
     /// let mut reader = Reader::new(&[50, 6, 3]);
-    /// assert!(reader.get(5).is_err());
-    /// assert_eq!(reader.get(2).unwrap(), Reader::new(&[50, 6]));
-    /// assert_eq!(reader.get(1).unwrap(), Reader::new(&[3]));
+    /// assert!(reader.get_bytes(5).is_err());
+    /// assert_eq!(reader.get_bytes(2).unwrap(), &[50, 6]);
+    /// assert_eq!(reader.get_bytes(1).unwrap(), &[3]);
     /// assert!(reader.is_empty());
     /// ```
-    pub fn get(&mut self, len: usize) -> Result<Self, EOFError> {
+    pub fn get_bytes(&mut self, len: usize) -> Result<&'a [u8], EOFError> {
         if len > self.untrusted_buffer.len() {
             Err(EOFError)
         } else {
             let (untrusted_buffer, untrusted_rest) = self.untrusted_buffer.split_at(len);
             self.untrusted_buffer = untrusted_rest;
-            Ok(Self { untrusted_buffer })
+            Ok(untrusted_buffer)
+        }
+    }
+
+    /// Reads `len` bytes of data, then calls `cb` with the result.  `cb` must use all of those
+    /// bytes, otherwise `trailing_junk` is returned.
+    pub fn read_bytes<T, U, V: Fn(&mut Self) -> Result<T, U>>(
+        &mut self,
+        len: usize,
+        trailing_junk: U,
+        cb: V,
+    ) -> Result<T, U> {
+        if len > self.untrusted_buffer.len() {
+            Err(trailing_junk)
+        } else {
+            let (untrusted_buffer, untrusted_rest) = self.untrusted_buffer.split_at(len);
+            let retval = cb(&mut Self { untrusted_buffer })?;
+            if !untrusted_buffer.is_empty() {
+                return Err(trailing_junk);
+            }
+            self.untrusted_buffer = untrusted_rest;
+            Ok(retval)
         }
     }
 
@@ -317,13 +339,13 @@ impl<'a> Reader<'a> {
     /// # use openpgp_parser::{buffer::Reader, Error};
     /// let mut reader = Reader::new(&[50, 6, 3]);
     /// reader.read(|s| {
-    ///     s.get(3).unwrap(); // will succeed
-    ///     s.get(1) // fails
+    ///     s.get_bytes(3).unwrap(); // will succeed
+    ///     s.get_bytes(1) // fails
     /// }).unwrap_err();
     /// assert_eq!(reader.len(), 3); // the reader has not been changed
     /// let () = reader.read::<_, Error, _>(|s| {
-    ///     s.get(2)?;
-    ///     s.get(1)?;
+    ///     s.get_bytes(2)?;
+    ///     s.get_bytes(1)?;
     ///     Ok(())
     /// }).unwrap();
     /// assert!(reader.is_empty()); // reader has been changed
@@ -342,13 +364,13 @@ impl<'a> Reader<'a> {
     /// # use openpgp_parser::{buffer::Reader, Error};
     /// let mut reader = Reader::new(&[50, 6, 3]);
     /// reader.read(|s| {
-    ///     s.get(3).unwrap(); // will succeed
-    ///     s.get(1) // fails
+    ///     s.get_bytes(3).unwrap(); // will succeed
+    ///     s.get_bytes(1) // fails
     /// }).unwrap_err();
     /// assert_eq!(reader.len(), 3); // the reader has not been changed
     /// let (new_reader, ()) = reader.get_read::<_, Error, _>(|s| {
-    ///     s.get(2)?;
-    ///     s.get(1)?;
+    ///     s.get_bytes(2)?;
+    ///     s.get_bytes(1)?;
     ///     Ok(())
     /// }).unwrap();
     /// assert!(reader.is_empty()); // reader has been changed
@@ -360,21 +382,24 @@ impl<'a> Reader<'a> {
     ) -> Result<(Self, T), U> {
         let mut dup = self.clone();
         let retval = cb(&mut dup)?;
-        let bytes_read = self.len() - dup.len();
-        Ok((self.get(bytes_read).expect("the length of a reader cannot increase, so bytes_read() will be positive and less than or equal to self.len(); qed"), retval))
+        let ret_buf = Self {
+            untrusted_buffer: &self.untrusted_buffer[..self.len() - dup.len()],
+        };
+        *self = dup;
+        Ok((ret_buf, retval))
     }
 
     /// Call the given callback with a copy of `self`.  If the callback
     /// fails, return that error.  If the callback succeeds, it is expected to
     /// consume the whole buffer; otherwise, `trailing_junk` is returned.
     pub fn read_all<T, U, V: FnOnce(&mut Self) -> Result<T, U>>(
-        &mut self,
+        untrusted_buffer: &'a [u8],
         trailing_junk: U,
         cb: V,
     ) -> Result<T, U> {
-        let mut dup = self.clone();
-        let retval = cb(&mut dup)?;
-        match dup.is_empty() {
+        let mut reader = Self { untrusted_buffer };
+        let retval = cb(&mut reader)?;
+        match reader.is_empty() {
             true => Ok(retval),
             false => Err(trailing_junk),
         }
@@ -393,10 +418,10 @@ mod tests {
     #[test]
     fn read_one_byte() {
         let mut buffer = Reader::new(b"abc");
-        assert_eq!(buffer.get(4), Err(EOFError));
+        assert_eq!(buffer.get_bytes(4), Err(EOFError));
         assert_eq!(buffer.maybe_byte(), Some(b'a'));
-        assert_eq!(buffer.get(2), Ok(Reader::new(&b"bc"[..])));
-        assert_eq!(buffer.get(2), Err(EOFError));
+        assert_eq!(buffer.get_bytes(2), Ok(&b"bc"[..]));
+        assert_eq!(buffer.get_bytes(2), Err(EOFError));
         assert!(buffer.maybe_byte().is_none());
         assert!(buffer.byte().is_err());
     }
