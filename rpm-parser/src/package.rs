@@ -25,20 +25,20 @@ impl RPMPackage {
         let signature = load_signature(r)?;
         let immutable = load_immutable(r)?;
         let (osnum, archnum) = (
-            os_to_osnum(immutable.os.as_bytes()),
-            arch_to_archnum(immutable.arch.as_bytes()),
+            os_to_osnum(immutable.os.as_bytes()).unwrap_or(255),
+            arch_to_archnum(immutable.arch.as_bytes()).unwrap_or(255),
         );
-        if Some(lead.osnum()) != osnum {
+        if lead.osnum() != osnum {
             bad_data!(
-                "Wrong OS number in lead (expected {}, found {:?})",
+                "Wrong OS number in lead (expected {}, found {})",
+                osnum,
                 lead.osnum(),
-                osnum
             )
-        } else if Some(lead.archnum()) != archnum {
+        } else if lead.archnum() != archnum {
             bad_data!(
-                "Wrong arch number in lead (expected {}, found {:?})",
+                "Wrong arch number in lead (expected {}, found {})",
+                archnum,
                 lead.archnum(),
-                archnum
             )
         }
         let ImmutableHeader {

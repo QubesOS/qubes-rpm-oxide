@@ -30,9 +30,9 @@ impl RPMLead {
             major: 3,
             minor: 0,
             ty: (ty as u16).to_be(),
-            archnum,
+            archnum: archnum.to_be(),
             name: name_dup,
-            osnum,
+            osnum: osnum.to_be(),
             signature_type: 5u16.to_be(),
             reserved: [0; 16],
         }
