@@ -6,7 +6,7 @@
 
 use crate::ffi::TagType;
 use crate::TagData;
-use openpgp_parser::buffer::Reader;
+use openpgp_parser::Reader;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
 

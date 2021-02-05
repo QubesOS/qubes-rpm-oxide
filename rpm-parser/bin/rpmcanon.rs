@@ -20,12 +20,10 @@ fn main() -> Result<()> {
         .ok_or_else(|| Error::new(ErrorKind::InvalidData, "Package header is not signed"))?;
 
     let untrusted_sig_body = {
-        openpgp_parser::packet::next(&mut openpgp_parser::buffer::Reader::new(
-            &untrusted_sig_body,
-        ))
-        .expect("already parsed")
-        .expect("already parsed")
-        .serialize()
+        openpgp_parser::packet::next(&mut openpgp_parser::Reader::new(&untrusted_sig_body))
+            .expect("already parsed")
+            .expect("already parsed")
+            .serialize()
     };
     let mut prelude = [0u8; 16];
 

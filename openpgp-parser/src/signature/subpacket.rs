@@ -29,7 +29,7 @@ impl<'a> Subpacket<'a> {
     /// subpacket.
     ///
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, signature::{Subpacket, Critical}};
+    /// # use openpgp_parser::{Reader, signature::{Subpacket, Critical}};
     /// Subpacket::new(0x7F, Critical::Yes, Reader::empty()).unwrap();
     /// Subpacket::new(0x80, Critical::Yes, Reader::empty()).unwrap_err();
     /// ```
@@ -49,7 +49,7 @@ impl<'a> Subpacket<'a> {
     /// Succeeds if `tag` is less than `0x80`.  Otherwise fails.
     ///
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, signature::{Subpacket, Critical}, Error};
+    /// # use openpgp_parser::{Reader, signature::{Subpacket, Critical}, Error};
     /// let empty_reader = Reader::new(&[][..]);
     /// assert_eq!(
     ///     Subpacket::new(0x80, Critical::Yes, empty_reader.clone()).unwrap_err(),
@@ -100,7 +100,7 @@ impl<'a> Subpacket<'a> {
     /// Retrieves the packet’s tag
     ///
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, signature::{Subpacket, Critical}};
+    /// # use openpgp_parser::{Reader, signature::{Subpacket, Critical}};
     /// let mut p = Subpacket::new(0x7F, Critical::Yes, Reader::new(&[][..])).unwrap();
     /// assert_eq!(p.tag(), 0x7F);
     /// ```
@@ -110,7 +110,7 @@ impl<'a> Subpacket<'a> {
 
     /// Retrieves whether the subpacket is critical.
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, signature::{Subpacket, Critical}};
+    /// # use openpgp_parser::{Reader, signature::{Subpacket, Critical}};
     /// let mut p = Subpacket::new(0x7F, Critical::Yes, Reader::new(&[][..])).unwrap();
     /// assert_eq!(p.critical(), Critical::Yes);
     /// ```

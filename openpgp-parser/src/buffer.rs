@@ -87,7 +87,7 @@ impl<'a> Reader<'a> {
     /// Returns [`true`] if and only if the buffer is empty.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::Reader;
     /// assert!(Reader::new(&[]).is_empty());
     /// assert!(!Reader::new(&[0]).is_empty());
     /// ```
@@ -99,7 +99,7 @@ impl<'a> Reader<'a> {
     /// Creates an empty reader
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::Reader;
     /// assert!(Reader::empty().is_empty());
     /// ```
     #[inline]
@@ -113,7 +113,7 @@ impl<'a> Reader<'a> {
     /// empty.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::Reader;
     /// assert!(Reader::empty().maybe_byte().is_none());
     /// let mut nonempty_reader = Reader::new(&[5][..]);
     /// assert_eq!(nonempty_reader.maybe_byte(), Some(5));
@@ -128,7 +128,7 @@ impl<'a> Reader<'a> {
     /// Same as [`Self::maybe_byte`], but fails if the buffer is empty.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::{Reader,EOFError};
+    /// # use openpgp_parser::{Reader,EOFError};
     /// assert_eq!(Reader::empty().byte().unwrap_err(), EOFError);
     /// let mut nonempty_reader = Reader::new(&[5][..]);
     /// assert_eq!(nonempty_reader.byte(), Ok(5));
@@ -141,7 +141,7 @@ impl<'a> Reader<'a> {
     /// Gets a slice; this is less safe.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::Reader;
     /// let mut nonempty_reader = Reader::new(&[5]);
     /// assert_eq!(nonempty_reader.as_untrusted_slice(), &[5]);
     /// ```
@@ -154,7 +154,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u16` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7]);
         /// assert_eq!(reader.le_u16().unwrap(), 0x605);
         /// assert!(reader.le_u16().is_err());
@@ -165,7 +165,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u32` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
         /// assert_eq!(reader.le_u32().unwrap(), 0x8070605);
         /// assert!(reader.le_u32().is_err());
@@ -176,7 +176,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u64` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         /// assert_eq!(reader.le_u64().unwrap(), 0x706050403020100);
         /// assert!(reader.le_u64().is_err());
@@ -189,7 +189,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u16` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7]);
         /// assert_eq!(reader.be_u16().unwrap(), 0x506);
         /// assert!(reader.be_u16().is_err());
@@ -200,7 +200,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u32` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
         /// assert_eq!(reader.be_u32().unwrap(), 0x5060708);
         /// assert!(reader.be_u32().is_err());
@@ -211,7 +211,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u64` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         /// assert_eq!(reader.be_u64().unwrap(), 0x1020304050607);
         /// assert!(reader.be_u64().is_err());
@@ -224,7 +224,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u16` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7]);
         /// assert_eq!(reader.le_u16_offset(1).unwrap(), 0x706);
         /// assert!(reader.le_u16_offset(2).is_err());
@@ -235,7 +235,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u32` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
         /// assert_eq!(reader.le_u32_offset(1).unwrap(), 0x9080706);
         /// assert!(reader.le_u32_offset(2).is_err());
@@ -246,7 +246,7 @@ impl<'a> Reader<'a> {
         /// Gets a little-endian `u64` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         /// assert_eq!(reader.le_u64_offset(2).unwrap(), 0x908070605040302);
         /// assert!(reader.le_u64_offset(3).is_err());
@@ -259,7 +259,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u16` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7]);
         /// assert_eq!(reader.be_u16_offset(1).unwrap(), 0x607);
         /// assert!(reader.be_u16_offset(2).is_err());
@@ -270,7 +270,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u32` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[5, 6, 7, 8, 9]);
         /// assert_eq!(reader.be_u32_offset(1).unwrap(), 0x6070809);
         /// assert!(reader.be_u32_offset(2).is_err());
@@ -281,7 +281,7 @@ impl<'a> Reader<'a> {
         /// Gets a big-endian `u64` value
         ///
         /// ```rust
-        /// # use openpgp_parser::buffer::Reader;
+        /// # use openpgp_parser::Reader;
         /// let mut reader = Reader::new(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         /// assert_eq!(reader.be_u64_offset(2).unwrap(), 0x203040506070809);
         /// assert!(reader.be_u64_offset(3).is_err());
@@ -294,7 +294,7 @@ impl<'a> Reader<'a> {
     /// data manually.
     ///
     /// ```rust
-    /// # use openpgp_parser::buffer::Reader;
+    /// # use openpgp_parser::Reader;
     /// let mut reader = Reader::new(&[50, 6, 3]);
     /// assert!(reader.get_bytes(5).is_err());
     /// assert_eq!(reader.get_bytes(2).unwrap(), &[50, 6]);
@@ -336,7 +336,7 @@ impl<'a> Reader<'a> {
     /// succeeds, `self` is updated to match the copy.
     ///
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, Error};
+    /// # use openpgp_parser::{Reader, Error};
     /// let mut reader = Reader::new(&[50, 6, 3]);
     /// reader.read(|s| {
     ///     s.get_bytes(3).unwrap(); // will succeed
@@ -361,7 +361,7 @@ impl<'a> Reader<'a> {
     /// containing the bytes read.
     ///
     /// ```rust
-    /// # use openpgp_parser::{buffer::Reader, Error};
+    /// # use openpgp_parser::{Reader, Error};
     /// let mut reader = Reader::new(&[50, 6, 3]);
     /// reader.read(|s| {
     ///     s.get_bytes(3).unwrap(); // will succeed

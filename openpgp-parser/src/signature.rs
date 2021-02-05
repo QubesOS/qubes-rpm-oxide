@@ -2,7 +2,7 @@
 
 mod subpacket;
 
-use super::{buffer::Reader, packet, Error};
+use super::{packet, Error, Reader};
 
 use core::convert::{TryFrom, TryInto};
 pub use subpacket::{Critical, Subpacket, SubpacketIterator};

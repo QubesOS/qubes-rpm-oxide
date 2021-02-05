@@ -23,7 +23,8 @@
 #![forbid(missing_docs, unsafe_code, deprecated)]
 #![deny(warnings)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
-pub mod buffer;
+pub use buffer::{EOFError, Reader};
+mod buffer;
 pub mod packet;
 pub mod signature;
 

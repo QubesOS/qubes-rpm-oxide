@@ -1,6 +1,6 @@
 //! Utility functions for parsing OpenPGP packets
 
-use super::{buffer::Reader, Error};
+use super::{Error, Reader};
 
 /// The format of a packet
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -24,7 +24,7 @@ pub struct Packet<'a> {
 /// Therefore, the return value will always be less than `usize::MAX`.
 ///
 /// ```rust
-/// # use openpgp_parser::{packet::get_be_u32, buffer::Reader};
+/// # use openpgp_parser::{packet::get_be_u32, Reader};
 /// let mut reader = Reader::new(&[1, 2, 3, 4, 5]);
 /// assert!(get_be_u32(&mut reader, 5).is_err());
 /// assert_eq!(get_be_u32(&mut reader, 3).unwrap(), 0x10203);
