@@ -48,12 +48,14 @@ pub enum Error {
     BadMPI,
     /// Ill-formed signature
     IllFormedSignature,
-    /// Unsupported algorithm
-    UnsupportedAlgorithm,
+    /// Unsupported hash algorithm
+    UnsupportedHashAlgorithm(i32),
+    /// Unsupported public-key algorithm
+    UnsupportedPkeyAlgorithm(u8),
     /// Insecure algorithm
-    InsecureAlgorithm,
-    /// Invalid algorithm (such as an encryption algorithm uesd for signatures)
-    InvalidAlgorithm,
+    InsecureAlgorithm(i32),
+    /// Invalid public-key algorithm (such as an encryption algorithm uesd for signatures)
+    InvalidPkeyAlgorithm(u8),
     /// Signature not valid yet
     SignatureNotValidYet,
     /// Signature expired

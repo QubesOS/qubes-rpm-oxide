@@ -37,10 +37,10 @@ const OPENPGP_SIGNATURE_TYPE_BINARY: u8 = 0;
 const OPENPGP_HASH_INSECURE_MD5: i32 = 1;
 const OPENPGP_HASH_INSECURE_SHA1: i32 = 2;
 const OPENPGP_HASH_INSECURE_RIPEMD160: i32 = 3;
-const OPENPGP_HASH_RESERVED1: i32 = 4;
-const OPENPGP_HASH_RESERVED2: i32 = 5;
-const OPENPGP_HASH_RESERVED3: i32 = 6;
-const OPENPGP_HASH_RESERVED4: i32 = 7;
+const OPENPGP_HASH_EXPIRIMENTAL_DOUBLE_SHA: i32 = 4;
+const OPENPGP_HASH_INSECURE_MD2: i32 = 5;
+const OPENPGP_HASH_INSECURE_TIGER192: i32 = 6;
+const OPENPGP_HASH_INSECURE_HAVAL_5_160: i32 = 7;
 const OPENPGP_HASH_SHA256: i32 = 8;
 const OPENPGP_HASH_SHA384: i32 = 9;
 const OPENPGP_HASH_SHA512: i32 = 10;
@@ -97,15 +97,15 @@ pub fn check_hash_algorithm(hash: i32) -> Result<u16, Error> {
         OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
         OPENPGP_HASH_INSECURE_RIPEMD160 |
+        OPENPGP_HASH_INSECURE_MD2 |
+        OPENPGP_HASH_INSECURE_TIGER192 |
+        OPENPGP_HASH_INSECURE_HAVAL_5_160 |
         // SHA224 is secure, but its security level is a bit low
-        OPENPGP_HASH_SHA224 => Err(Error::InsecureAlgorithm),
+        OPENPGP_HASH_SHA224 => Err(Error::InsecureAlgorithm(hash)),
         // Invalid algorithms
-        OPENPGP_HASH_RESERVED1 |
-        OPENPGP_HASH_RESERVED2 |
-        OPENPGP_HASH_RESERVED3 |
-        OPENPGP_HASH_RESERVED4 |
+        OPENPGP_HASH_EXPIRIMENTAL_DOUBLE_SHA |
         // Unknown algorithms
-        _ => Err(Error::UnsupportedAlgorithm),
+        _ => Err(Error::UnsupportedHashAlgorithm(hash)),
     }
 }
 
@@ -315,11 +315,11 @@ fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigI
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY |
                 OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY |
                 OPENPGP_PUBLIC_KEY_ECDH |
-                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidAlgorithm),
+                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidPkeyAlgorithm(pkey_alg)),
 
                 // Unsupported legacy algoritms
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY |
-                _ => return Err(Error::UnsupportedAlgorithm),
+                _ => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
             };
             hash_alg = reader.byte()?;
             check_hash_algorithm(hash_alg.into())?;
@@ -335,7 +335,7 @@ fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigI
             let mpis = match pkey_alg {
                 OPENPGP_PUBLIC_KEY_RSA => 1,
                 // RPM does not support ECDSA
-                OPENPGP_PUBLIC_KEY_ECDSA => return Err(Error::UnsupportedAlgorithm),
+                OPENPGP_PUBLIC_KEY_ECDSA => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
                 OPENPGP_PUBLIC_KEY_EDDSA | OPENPGP_PUBLIC_KEY_DSA => 2,
 
                 // Prohibited algorithm
@@ -344,11 +344,11 @@ fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigI
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY |
                 OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY |
                 OPENPGP_PUBLIC_KEY_ECDH |
-                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidAlgorithm),
+                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidPkeyAlgorithm(pkey_alg)),
 
                 // Unsupported legacy algoritms
                 OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY |
-                _ => return Err(Error::UnsupportedAlgorithm),
+                _ => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
             };
             #[cfg(test)]
             eprintln!("Signature algorithm is {}", pkey_alg);

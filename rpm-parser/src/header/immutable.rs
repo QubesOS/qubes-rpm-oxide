@@ -1,7 +1,7 @@
 //! Functions for parsing RPM immutable headers
 
 use super::{check_hex, load_header, Header};
-use crate::ffi::{rpm_hash_len, tag_type, tag_class, TagType};
+use crate::ffi::{rpm_hash_len, tag_class, tag_type, TagType};
 use crate::{RPMLead, TagData};
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
