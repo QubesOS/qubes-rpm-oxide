@@ -60,6 +60,7 @@ pub use transaction::{RpmKeyring, RpmTransactionSet};
 #[link(name = "rpm")]
 extern "C" {
     fn rpmTagGetType(tag: std::os::raw::c_int) -> std::os::raw::c_int;
+    fn rpmTagTypeGetClass(tag: std::os::raw::c_int) -> std::os::raw::c_int;
 }
 
 #[link(name = "rpmio")]
@@ -119,6 +120,10 @@ pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
         },
         is_array,
     ))
+}
+
+pub fn tag_class(ty: TagType) -> std::os::raw::c_int {
+    unsafe { rpmTagTypeGetClass(ty as _) }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! Functions for parsing RPM immutable headers
 
 use super::{check_hex, load_header, Header};
-use crate::ffi::{rpm_hash_len, tag_type, TagType};
+use crate::ffi::{rpm_hash_len, tag_type, tag_class, TagType};
 use crate::{RPMLead, TagData};
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
@@ -83,7 +83,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
         fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
         fail_if!(tag > 0x7FFF, "type too large");
         match tag_type(tag) {
-            Some((t, is_array)) if t == ty => {
+            Some((t, is_array)) if t == ty || (tag_class(t) == 2 && tag_class(ty) == 2) => {
                 if !is_array && tag_data.count() != 1 {
                     bad_data!("Non-array tag {} with count {}", tag, tag_data.count())
                 }
@@ -91,7 +91,8 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             None => bad_data!("invalid tag {} in immutable header", tag),
             Some((t, _)) => {
                 bad_data!(
-                    "wrong type in immutable header: expected {:?} but got {:?}",
+                    "wrong type in immutable header: for tag {}, expected {:?} but got {:?}",
+                    tag,
                     t,
                     ty
                 )
