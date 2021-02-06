@@ -1,6 +1,6 @@
 //! FFI code
 #![forbid(improper_ctypes)]
-use openpgp_parser::Error;
+use openpgp_parser::{AllowWeakHashes, Error};
 
 /// An OpenPGP signature
 pub struct Signature {
@@ -32,10 +32,15 @@ impl Signature {
     /// Parse an OpenPGP signature.  The signature is validated before being
     /// passed to RPM.  If the time is not zero, the signature is checked to not
     /// be from the future and to not have expired.
-    pub fn parse(untrusted_buffer: &[u8], time: u32, _: InitToken) -> Result<Self, Error> {
-        let sig = RawSignature::parse(untrusted_buffer, time)?;
-        let ctx =
-            DigestCtx::init(sig.hash_algorithm()).expect("Digest algorithm already validated");
+    pub fn parse(
+        untrusted_buffer: &[u8],
+        time: u32,
+        _: InitToken,
+        allow_sha1_sha224: AllowWeakHashes,
+    ) -> Result<Self, Error> {
+        let sig = RawSignature::parse(untrusted_buffer, time, allow_sha1_sha224)?;
+        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_sha1_sha224)
+            .expect("Digest algorithm already validated");
         Ok(Self { sig, ctx })
     }
 
@@ -135,14 +140,14 @@ mod tests {
         for &i in &[8, 9, 10] {
             assert_eq!(
                 unsafe { rpmDigestLength(i) },
-                check_hash_algorithm(i).unwrap().into()
+                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
             );
         }
     }
     #[test]
     fn check_rpm_crypto() {
         for &i in &[8, 9, 10] {
-            let mut s = DigestCtx::init(i).unwrap();
+            let mut s = DigestCtx::init(i, AllowWeakHashes::No).unwrap();
             println!("Initialized RPM crypto context");
             s.update(b"this is a test!");
             println!("Finalizing");

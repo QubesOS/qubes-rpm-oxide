@@ -3,6 +3,7 @@
 use super::{check_hex, load_header, Header};
 use crate::ffi::{rpm_hash_len, tag_class, tag_type, TagType};
 use crate::{RPMLead, TagData};
+use openpgp_parser::AllowWeakHashes;
 use std::convert::TryInto;
 use std::io::{Error, ErrorKind, Read, Result};
 
@@ -37,7 +38,9 @@ impl ImmutableHeader {
             None => bad_data!("No payload digest algorithm"),
             Some(e) => e,
         };
-        let ctx = crate::DigestCtx::init(alg).expect("algorithm already validated");
+        // We already checked the digest algorithm
+        let ctx =
+            crate::DigestCtx::init(alg, AllowWeakHashes::Yes).expect("algorithm already validated");
         let digest = self
             .payload_digest
             .as_ref()
@@ -106,13 +109,16 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
                     Err(_) => bad_data!("wrong length"), // RPM might make this an array in the future
                     Ok(e) => e,
                 });
+                // We never allow weak payload digests, as there is no point to using them and we
+                // are not aware of anyone ever generating them.
                 let hash_len =
-                    openpgp_parser::signature::check_hash_algorithm(alg).map_err(|e| {
-                        Error::new(
-                            ErrorKind::InvalidData,
-                            format!("bad algorithm {}: {:?}", alg, e),
-                        )
-                    })?;
+                    openpgp_parser::signature::check_hash_algorithm(alg, AllowWeakHashes::No)
+                        .map_err(|e| {
+                            Error::new(
+                                ErrorKind::InvalidData,
+                                format!("bad algorithm {}: {:?}", alg, e),
+                            )
+                        })?;
                 if rpm_hash_len(alg) != hash_len.into() {
                     bad_data!("Unsupported hash algorithm {}", alg)
                 }

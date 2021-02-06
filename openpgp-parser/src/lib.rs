@@ -28,6 +28,8 @@ mod buffer;
 pub mod packet;
 pub mod signature;
 
+pub use signature::AllowWeakHashes;
+
 /// Errors that can occur during parsing
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Error {

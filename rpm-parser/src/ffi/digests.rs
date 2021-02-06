@@ -1,3 +1,4 @@
+use openpgp_parser::AllowWeakHashes;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 
@@ -48,10 +49,10 @@ impl std::io::Write for DigestCtx {
 
 impl DigestCtx {
     /// Initialize an RPM digest context
-    pub fn init(algorithm: u8) -> Result<DigestCtx, ()> {
+    pub fn init(algorithm: u8, allow_sha1_sha224: AllowWeakHashes) -> Result<DigestCtx, ()> {
         use openpgp_parser::signature::check_hash_algorithm;
         super::init();
-        let len = check_hash_algorithm(algorithm.into()).map_err(drop)?;
+        let len = check_hash_algorithm(algorithm.into(), allow_sha1_sha224).map_err(drop)?;
         #[cfg(test)]
         eprintln!("Hash algorithm {} accepted by us", algorithm);
         if super::rpm_hash_len(algorithm.into()) != len.into() {

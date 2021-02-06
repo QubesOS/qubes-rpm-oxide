@@ -1,6 +1,7 @@
 use super::{check_hex, load_header, Header};
 use crate::ffi::{Signature, TagType};
 use crate::TagData;
+use openpgp_parser::AllowWeakHashes;
 use std::io::{Read, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -60,7 +61,10 @@ pub struct SignatureHeader {
     pub header_payload_signature: Option<(Signature, Vec<u8>)>,
 }
 
-pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
+pub fn load_signature(
+    r: &mut dyn Read,
+    allow_sha1_sha224: AllowWeakHashes,
+) -> Result<SignatureHeader> {
     let tok = crate::ffi::init();
     let mut header_signature = None;
     let mut header_payload_signature = None;
@@ -97,7 +101,7 @@ pub fn load_signature(r: &mut dyn Read) -> Result<SignatureHeader> {
                 check_hex(&body[..body.len() - 1])
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body, 0, tok) {
+                let sig = match Signature::parse(body, 0, tok, allow_sha1_sha224) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };

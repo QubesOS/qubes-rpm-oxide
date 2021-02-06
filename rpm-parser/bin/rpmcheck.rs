@@ -1,3 +1,4 @@
+use openpgp_parser::AllowWeakHashes;
 use std::fs::File;
 use std::io::{copy, Error, ErrorKind, Result};
 fn main() -> Result<()> {
@@ -7,7 +8,7 @@ fn main() -> Result<()> {
     };
     for i in args {
         let mut s = File::open(i)?;
-        let package = rpm_parser::RPMPackage::read(&mut s)?;
+        let package = rpm_parser::RPMPackage::read(&mut s, AllowWeakHashes::No)?;
         package
             .signature
             .header_signature

@@ -1,4 +1,4 @@
-use openpgp_parser::{signature, Error};
+use openpgp_parser::{signature, AllowWeakHashes, Error};
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
@@ -6,16 +6,22 @@ enum RpmPgpDigParams {}
 pub(super) struct Signature(*mut RpmPgpDigParams);
 
 impl Signature {
-    pub fn parse(untrusted_buffer: &[u8], time: u32) -> Result<Self, Error> {
+    pub fn parse(
+        untrusted_buffer: &[u8],
+        time: u32,
+        allow_sha1_sha224: AllowWeakHashes,
+    ) -> Result<Self, Error> {
         super::init();
         // Check that the signature is valid
-        signature::parse(untrusted_buffer, time)?;
+        let sig_info = signature::parse(untrusted_buffer, time, allow_sha1_sha224)?;
         // We can now pass the buffer to RPM, since it is a valid signature
         let slice = untrusted_buffer;
         let mut params = Signature(std::ptr::null_mut());
         let r = unsafe { pgpPrtParams(slice.as_ptr(), slice.len(), 2, &mut params) };
         assert!(r == 0, "we accepted a signature RPM rejected");
         assert!(!params.0.is_null());
+        assert_eq!(params.hash_algorithm(), sig_info.hash_alg());
+        assert_eq!(params.public_key_algorithm(), sig_info.pkey_alg());
         Ok(params)
     }
 

@@ -7,6 +7,15 @@ use super::{packet, Error, Reader};
 use core::convert::{TryFrom, TryInto};
 pub use subpacket::{Critical, Subpacket, SubpacketIterator};
 
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+/// Should weak hashes (less than 256 bits and vulnerable to collisions) be allowed?
+pub enum AllowWeakHashes {
+    /// Do not allow weak hashes
+    No,
+    /// Allow weak hashes
+    Yes,
+}
+
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// slice.
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
@@ -86,13 +95,15 @@ const SUBPACKET_EMBEDDED_SIGNATURE: u8 = 32;
 const SUBPACKET_FINGERPRINT: u8 = 33;
 
 /// Checks that a hash algorithm is secure; if it is, returns the length (in bytes) of the hash it
-/// generates.
-pub fn check_hash_algorithm(hash: i32) -> Result<u16, Error> {
+/// generates.  If `allow_sha1_sha224` is set, also allow SHA1 and SHA224.
+pub fn check_hash_algorithm(hash: i32, allow_sha1_sha224: AllowWeakHashes) -> Result<u16, Error> {
     match hash {
         // Okay hash algorithms
         OPENPGP_HASH_SHA256 => Ok(32),
         OPENPGP_HASH_SHA384 => Ok(48),
         OPENPGP_HASH_SHA512 => Ok(64),
+        OPENPGP_HASH_SHA224 if allow_sha1_sha224 == AllowWeakHashes::Yes => Ok(28),
+        OPENPGP_HASH_INSECURE_SHA1 if allow_sha1_sha224 == AllowWeakHashes::Yes => Ok(20),
         // Insecure hash algorithms
         OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
@@ -258,14 +269,22 @@ fn process_subpacket<'a>(
 }
 
 /// Parse a signature from a slice
-pub fn parse<'a>(data: &'a [u8], timestamp: u32) -> Result<SigInfo<'a>, Error> {
+pub fn parse<'a>(
+    data: &'a [u8],
+    timestamp: u32,
+    allow_sha1_sha224: AllowWeakHashes,
+) -> Result<SigInfo<'a>, Error> {
     Reader::read_all(data, Error::TrailingJunk, |reader| {
-        read_signature(reader, timestamp)
+        read_signature(reader, timestamp, allow_sha1_sha224)
     })
 }
 
 /// Reads a signature from `reader`
-pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo<'a>, Error> {
+pub fn read_signature<'a>(
+    reader: &mut Reader<'a>,
+    timestamp: u32,
+    allow_sha1_sha224: AllowWeakHashes,
+) -> Result<SigInfo<'a>, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     let tag = packet.tag();
     if tag != 2 {
@@ -274,11 +293,15 @@ pub fn read_signature<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<Sig
         return Err(Error::IllFormedSignature);
     }
     Reader::read_all(packet.contents(), Error::TrailingJunk, |e| {
-        parse_packet_body(e, timestamp)
+        parse_packet_body(e, timestamp, allow_sha1_sha224)
     })
 }
 
-fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigInfo<'a>, Error> {
+fn parse_packet_body<'a>(
+    reader: &mut Reader<'a>,
+    timestamp: u32,
+    allow_sha1_sha224: AllowWeakHashes,
+) -> Result<SigInfo<'a>, Error> {
     let version = reader.byte()?;
     #[cfg(test)]
     eprintln!("Version is {}", version);
@@ -322,7 +345,7 @@ fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigI
                 _ => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
             };
             hash_alg = reader.byte()?;
-            check_hash_algorithm(hash_alg.into())?;
+            check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
             let iter = SubpacketIterator::empty();
             (iter, mpis)
         }
@@ -353,7 +376,7 @@ fn parse_packet_body<'a>(reader: &mut Reader<'a>, timestamp: u32) -> Result<SigI
             #[cfg(test)]
             eprintln!("Signature algorithm is {}", pkey_alg);
             hash_alg = reader.byte()?;
-            check_hash_algorithm(hash_alg.into())?;
+            check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
             #[cfg(test)]
             eprintln!("digest algo {}", hash_alg);
             let subpackets = subpacket::SubpacketIterator::read_u16_prefixed(reader)?;
@@ -416,16 +439,25 @@ mod tests {
         static TRAILING_JUNK: &'static [u8] = include_bytes!("../../trailing-junk.asc");
         assert_eq!(TRAILING_JUNK.len(), EDDSA_SIG.len() + 1);
         assert_eq!(
-            Reader::read_all(TRAILING_JUNK, Error::TrailingJunk, |r| read_signature(r, 0)
-                .map(drop))
+            Reader::read_all(TRAILING_JUNK, Error::TrailingJunk, |r| read_signature(
+                r,
+                0,
+                AllowWeakHashes::No
+            )
+            .map(drop))
             .unwrap_err(),
             Error::TrailingJunk
         );
         assert_eq!(
-            read_signature(&mut Reader::new(&EDDSA_SIG[..EDDSA_SIG.len() - 1]), 0).unwrap_err(),
+            read_signature(
+                &mut Reader::new(&EDDSA_SIG[..EDDSA_SIG.len() - 1]),
+                0,
+                AllowWeakHashes::No
+            )
+            .unwrap_err(),
             Error::PrematureEOF
         );
-        let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0).unwrap();
+        let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0, AllowWeakHashes::No).unwrap();
         assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
         assert_eq!(sig.creation_time(), 1611626266);
         assert_eq!(sig.fingerprint().unwrap()[12..], sig.key_id()[..]);
