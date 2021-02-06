@@ -119,67 +119,43 @@ fn verify_package(
         main_header_bytes.len()
     );
     let mut output_sig_tag = RPMSIGTAG_GPG;
-    if let Some((mut signature, sig_bytes)) = sig_header.header_signature.take() {
-        // We ignore the old signature in this case.
-        signature.update(&main_header_bytes);
-        keyring.validate_sig(signature).map_err(|e| {
-            Error::new(
-                ErrorKind::InvalidData,
-                match e {
-                    2 => "Signature forged!",
-                    3 => "Key not trusted!",
-                    4 => "No key available!",
-                    _ => panic!("bad RPM retval"),
-                },
-            )
-        })?;
-        let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes)?;
-        validator.dgst = match main_header.payload_digest() {
-            Ok(s) => {
-                untrusted_sig_body = reserialize_parsed_sig(&sig_bytes);
-                output_sig_tag = RPMSIGTAG_RSAHEADER;
-                Some(s)
-            }
-            Err(_) if allow_old_pkgs => None,
-            Err(e) => return Err(e),
-        };
-        copy(src, &mut validator)?;
-        validator
-            .validate(&keyring)
-            .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
-        Ok((
-            main_header,
-            output_sig_tag,
-            untrusted_sig_body,
-            main_header_bytes,
-            hdr_digest,
-        ))
-    } else if allow_old_pkgs {
-        copy(src, &mut validator)?;
-        validator
-            .validate(&keyring)
-            .map_err(|()| Error::new(ErrorKind::InvalidData, "signature not verifiable"))?;
-        let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes)?;
-        if main_header.payload_digest().is_ok() {
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                "payload digest present, but header not signed",
-            ))
-        } else {
-            Ok((
-                main_header,
-                output_sig_tag,
-                untrusted_sig_body,
-                main_header_bytes,
-                hdr_digest,
-            ))
-        }
-    } else {
-        Err(Error::new(
+    let (mut signature, sig_bytes) = sig_header
+        .header_signature
+        .take()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "header not signed"))?;
+    signature.update(&main_header_bytes);
+    keyring.validate_sig(signature).map_err(|e| {
+        Error::new(
             ErrorKind::InvalidData,
-            "header not signed, and allow_old_pkgs not set",
-        ))
-    }
+            match e {
+                2 => "Signature forged!",
+                3 => "Key not trusted!",
+                4 => "No key available!",
+                _ => panic!("bad RPM retval"),
+            },
+        )
+    })?;
+    let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes)?;
+    validator.dgst = match main_header.payload_digest() {
+        Ok(s) => {
+            untrusted_sig_body = reserialize_parsed_sig(&sig_bytes);
+            output_sig_tag = RPMSIGTAG_RSAHEADER;
+            Some(s)
+        }
+        Err(_) if allow_old_pkgs => None,
+        Err(e) => return Err(e),
+    };
+    copy(src, &mut validator)?;
+    validator
+        .validate(&keyring)
+        .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
+    Ok((
+        main_header,
+        output_sig_tag,
+        untrusted_sig_body,
+        main_header_bytes,
+        hdr_digest,
+    ))
 }
 
 fn process_file(
