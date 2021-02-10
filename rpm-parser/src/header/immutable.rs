@@ -1,7 +1,7 @@
 //! Functions for parsing RPM immutable headers
 
 use super::{check_hex, load_header, Header};
-use crate::ffi::{rpm_hash_len, tag_class, tag_type, TagType};
+use crate::ffi::{rpm_hash_len, tag_class, tag_type, TagType, InitToken, DigestCtx};
 use crate::{RPMLead, TagData};
 use openpgp_parser::AllowWeakHashes;
 use std::convert::TryInto;
@@ -27,20 +27,21 @@ pub struct ImmutableHeader {
     pub source: bool,
     pub(super) payload_digest: Option<Vec<u8>>,
     pub(super) payload_digest_algorithm: Option<u8>,
+    token: InitToken,
 }
 include!("../tables.rs");
 
 impl ImmutableHeader {
     /// Gets a digest context for the package payload, along with the hex digest
     /// to verify it against.
-    pub fn payload_digest(&self) -> Result<(crate::DigestCtx, Vec<u8>)> {
+    pub fn payload_digest(&self) -> Result<(DigestCtx, Vec<u8>)> {
         let alg = match self.payload_digest_algorithm {
             None => bad_data!("No payload digest algorithm"),
             Some(e) => e,
         };
         // We already checked the digest algorithm
         let ctx =
-            crate::DigestCtx::init(alg, AllowWeakHashes::Yes).expect("algorithm already validated");
+            DigestCtx::init(alg, AllowWeakHashes::Yes, self.token).expect("algorithm already validated");
         let digest = self
             .payload_digest
             .as_ref()
@@ -71,7 +72,7 @@ impl ImmutableHeader {
     }
 }
 
-pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
+pub fn load_immutable(r: &mut dyn Read, token: InitToken) -> Result<ImmutableHeader> {
     let mut payload_digest_algorithm = None;
     let mut payload_digest: Option<Vec<u8>> = None;
     let mut name: Option<String> = None;
@@ -199,6 +200,7 @@ pub fn load_immutable(r: &mut dyn Read) -> Result<ImmutableHeader> {
             os,
             arch,
             source,
+            token,
         }),
         _ => bad_data!("Missing name, OS, arch, version, or release"),
     }

@@ -1,4 +1,5 @@
 use openpgp_parser::{signature, AllowWeakHashes, Error};
+use super::InitToken;
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
@@ -10,6 +11,7 @@ impl Signature {
         untrusted_buffer: &[u8],
         time: u32,
         allow_sha1_sha224: AllowWeakHashes,
+        _: InitToken,
     ) -> Result<Self, Error> {
         super::init();
         // Check that the signature is valid

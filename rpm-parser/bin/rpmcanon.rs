@@ -76,6 +76,7 @@ fn verify_package(
     sig_header: &mut rpm_parser::SignatureHeader,
     keyring: &rpm_parser::RpmKeyring,
     allow_old_pkgs: bool,
+    token: rpm_parser::InitToken,
 ) -> Result<(rpm_parser::MainHeader, u32, Vec<u8>, Vec<u8>, Vec<u8>)> {
     assert!(Validator {
         sig: None,
@@ -110,7 +111,7 @@ fn verify_package(
         main_header_bytes
     };
     let hdr_digest = {
-        let mut hdr_digest = DigestCtx::init(8, AllowWeakHashes::No).expect("SHA-256 is supported");
+        let mut hdr_digest = DigestCtx::init(8, AllowWeakHashes::No, token).expect("SHA-256 is supported");
         hdr_digest.update(&main_header_bytes);
         hdr_digest.finalize(true)
     };
@@ -135,7 +136,7 @@ fn verify_package(
             },
         )
     })?;
-    let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes)?;
+    let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes, token)?;
     validator.dgst = match main_header.payload_digest() {
         Ok(s) => {
             untrusted_sig_body = reserialize_parsed_sig(&sig_bytes);
@@ -165,14 +166,15 @@ fn process_file(
     allow_sha1_sha224: AllowWeakHashes,
     _sigcheck: bool,
     allow_old_pkgs: bool,
+    token: rpm_parser::InitToken,
 ) -> Result<()> {
     let mut s = File::open(src)?;
     // Ignore the lead
     let _ = rpm_parser::read_lead(&mut s)?;
     // Read the signature header
-    let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224)?;
+    let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
     let (immutable, tag, sig, main_header_bytes, hdr_digest) =
-        verify_package(&mut s, &mut sig_header, &tx.keyring(), allow_old_pkgs)?;
+        verify_package(&mut s, &mut sig_header, &tx.keyring(), allow_old_pkgs, token)?;
     // 167 = 96 + 16 + 16 + 16 + 16 + 16 + 65 + 7
     let magic_offset = 96;
     let index_offset = magic_offset + 16;
@@ -214,7 +216,7 @@ fn process_file(
     let trailer = &[TagData::new(62, TagType::Bin as _, (-48i32) as u32, 16)];
     out_data[magic_offset..sig_offset].copy_from_slice(TagData::as_bytes(&tags[..]));
     out_data[trailer_offset..end_trailer].copy_from_slice(TagData::as_bytes(trailer));
-    rpm_parser::load_signature(&mut &out_data[magic_offset..], allow_sha1_sha224).unwrap();
+    rpm_parser::load_signature(&mut &out_data[magic_offset..], allow_sha1_sha224, token).unwrap();
     let mut dest = File::create(dst)?;
     dest.write_all(&out_data)?;
     dest.write_all(&main_header_bytes)?;
@@ -229,6 +231,7 @@ fn process_file(
 }
 
 fn inner_main() -> i32 {
+    let token = rpm_parser::init();
     let mut args = std::env::args_os().into_iter();
     let mut allow_sha1_sha224 = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
@@ -254,12 +257,11 @@ fn inner_main() -> i32 {
         return usage(false);
     }
     let (src, dst) = (args[0].clone(), args[1].clone());
-    let token = rpm_parser::init();
     let tx = rpm_parser::RpmTransactionSet::new(token);
     if directory {
         todo!()
     }
-    match process_file(&tx, &src, &dst, allow_sha1_sha224, sigcheck, allow_old_pkgs) {
+    match process_file(&tx, &src, &dst, allow_sha1_sha224, sigcheck, allow_old_pkgs, token) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Error canonicalizing file: {}", e);

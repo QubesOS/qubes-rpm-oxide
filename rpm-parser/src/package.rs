@@ -5,7 +5,7 @@
 
 use crate::{
     header::{ImmutableHeader, SignatureHeader},
-    load_immutable, load_signature, read_lead, RPMLead,
+    load_immutable, load_signature, read_lead, RPMLead, InitToken
 };
 use openpgp_parser::AllowWeakHashes;
 use std::io::{Read, Result};
@@ -21,10 +21,10 @@ include!("tables.rs");
 
 impl RPMPackage {
     /// Load a package from `r`
-    pub fn read(r: &mut dyn Read, allow_sha1_sha224: AllowWeakHashes) -> Result<Self> {
+    pub fn read(r: &mut dyn Read, allow_sha1_sha224: AllowWeakHashes, token: InitToken) -> Result<Self> {
         let lead = read_lead(r)?;
-        let signature = load_signature(r, allow_sha1_sha224)?;
-        let immutable = load_immutable(r)?;
+        let signature = load_signature(r, allow_sha1_sha224, token)?;
+        let immutable = load_immutable(r, token)?;
         let (osnum, archnum) = (
             os_to_osnum(immutable.os.as_bytes()).unwrap_or(255),
             arch_to_archnum(immutable.arch.as_bytes()).unwrap_or(255),

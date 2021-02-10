@@ -64,8 +64,8 @@ pub struct SignatureHeader {
 pub fn load_signature(
     r: &mut dyn Read,
     allow_sha1_sha224: AllowWeakHashes,
+    token: crate::ffi::InitToken,
 ) -> Result<SignatureHeader> {
-    let tok = crate::ffi::init();
     let mut header_signature = None;
     let mut header_payload_signature = None;
     if cfg!(test) {
@@ -101,7 +101,7 @@ pub fn load_signature(
                 check_hex(&body[..body.len() - 1])
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body, 0, tok, allow_sha1_sha224) {
+                let sig = match Signature::parse(body, 0, allow_sha1_sha224, token) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };

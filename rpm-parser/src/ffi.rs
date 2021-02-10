@@ -35,11 +35,11 @@ impl Signature {
     pub fn parse(
         untrusted_buffer: &[u8],
         time: u32,
-        _: InitToken,
         allow_sha1_sha224: AllowWeakHashes,
+        token: InitToken,
     ) -> Result<Self, Error> {
-        let sig = RawSignature::parse(untrusted_buffer, time, allow_sha1_sha224)?;
-        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_sha1_sha224)
+        let sig = RawSignature::parse(untrusted_buffer, time, allow_sha1_sha224, token)?;
+        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_sha1_sha224, token)
             .expect("Digest algorithm already validated");
         Ok(Self { sig, ctx })
     }
@@ -140,14 +140,14 @@ mod tests {
         for &i in &[8, 9, 10] {
             assert_eq!(
                 unsafe { rpmDigestLength(i) },
-                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
+                check_hash_algorithm(i, AllowWeakHashes::No, init()).unwrap().into()
             );
         }
     }
     #[test]
     fn check_rpm_crypto() {
         for &i in &[8, 9, 10] {
-            let mut s = DigestCtx::init(i, AllowWeakHashes::No).unwrap();
+            let mut s = DigestCtx::init(i, AllowWeakHashes::No, init()).unwrap();
             println!("Initialized RPM crypto context");
             s.update(b"this is a test!");
             println!("Finalizing");
