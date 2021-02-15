@@ -1,11 +1,9 @@
 //! OpenPGP signatures
 
-mod subpacket;
-
 use super::{packet, Error, Reader};
+use packet::{get_length_bytes, get_varlen_bytes};
 
 use core::convert::{TryFrom, TryInto};
-pub use subpacket::{Critical, Subpacket, SubpacketIterator};
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 /// Should weak hashes (less than 256 bits and vulnerable to collisions) be allowed?
@@ -28,12 +26,6 @@ pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
             // this is not valid for encrypted MPIs, but we don’t deal with
             // them, as we only parse signatures
             if first_byte.leading_zeros() + (bits & 7) != 7 {
-                #[cfg(test)]
-                eprintln!(
-                    "First byte has {} leading zeros, expected {}",
-                    first_byte.leading_zeros(),
-                    bits & 7
-                );
                 return Err(Error::BadMPI);
             }
         }
@@ -94,6 +86,32 @@ const SUBPACKET_SIGNATURE_TARGET: u8 = 31;
 const SUBPACKET_EMBEDDED_SIGNATURE: u8 = 32;
 const SUBPACKET_FINGERPRINT: u8 = 33;
 
+/// Return the number of MPIs for the public-key algorithm `alg`, checking it
+/// against signature version `sig_version`.  Returns `Err` if the algorithm is
+/// invalid or unsupported for the given signature version.
+pub fn pkey_alg_mpis(alg: u8, sig_version: u8) -> Result<u8, Error> {
+    let is_v4 = match sig_version {
+        3 => false,
+        4 => true,
+        _ => return Err(Error::UnsupportedSignatureVersion),
+    };
+    match alg {
+        OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY
+        | OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY
+        | OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT
+        | OPENPGP_PUBLIC_KEY_ECDH
+        | OPENPGP_PUBLIC_KEY_DH => Err(Error::InvalidPkeyAlgorithm(alg)),
+        OPENPGP_PUBLIC_KEY_RSA | OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY => Ok(1),
+        OPENPGP_PUBLIC_KEY_EDDSA if is_v4 => Ok(2),
+        OPENPGP_PUBLIC_KEY_DSA => Ok(2),
+        OPENPGP_PUBLIC_KEY_ECDSA if is_v4 => Err(Error::UnsupportedPkeyAlgorithm(alg)),
+        OPENPGP_PUBLIC_KEY_ECDSA | OPENPGP_PUBLIC_KEY_EDDSA => {
+            Err(Error::PkeyAlgorithmRequiresV4Sig(alg))
+        }
+        _ => Err(Error::UnknownPkeyAlgorithm(alg)),
+    }
+}
+
 /// Checks that a hash algorithm is secure; if it is, returns the length (in bytes) of the hash it
 /// generates.  If `allow_sha1_sha224` is set, also allow SHA1 and SHA224.
 pub fn check_hash_algorithm(hash: i32, allow_sha1_sha224: AllowWeakHashes) -> Result<u16, Error> {
@@ -123,45 +141,19 @@ pub fn check_hash_algorithm(hash: i32, allow_sha1_sha224: AllowWeakHashes) -> Re
 /// Information about a signature
 #[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct SigInfo<'a> {
-    hash_alg: u8,
-    pkey_alg: u8,
-    key_id: [u8; 8],
-    fingerprint: Option<[u8; 20]>,
-    creation_time: u32,
-    expiration_time: Option<u32>,
-    subpackets: SubpacketIterator<'a>,
-}
-
-impl<'a> SigInfo<'a> {
+pub struct SigInfo {
     /// Hash algorithm
-    pub fn hash_alg(&self) -> u8 {
-        self.hash_alg
-    }
-    /// Public key algorithm
-    pub fn pkey_alg(&self) -> u8 {
-        self.pkey_alg
-    }
-    /// Signer Key ID
-    pub fn key_id(&self) -> [u8; 8] {
-        self.key_id
-    }
+    pub hash_alg: u8,
+    /// Public-key algorithm
+    pub pkey_alg: u8,
+    /// Key ID
+    pub key_id: [u8; 8],
+    /// Fingerprint
+    pub fingerprint: Option<[u8; 20]>,
     /// Creation time
-    pub fn creation_time(&self) -> u32 {
-        self.creation_time
-    }
-    /// Expiration time
-    pub fn expiration_time(&self) -> Option<u32> {
-        self.expiration_time
-    }
-    /// Iterator over subpackets
-    pub fn subpackets(&self) -> SubpacketIterator<'a> {
-        self.subpackets.clone()
-    }
-    /// Fingerprint, if provided
-    pub fn fingerprint(&self) -> Option<[u8; 20]> {
-        self.fingerprint
-    }
+    pub creation_time: u32,
+    /// Expiration time, if any
+    pub expiration_time: Option<u32>,
 }
 
 struct InternalSigInfo {
@@ -176,11 +168,11 @@ struct InternalSigInfo {
 }
 
 fn process_subpacket<'a>(
-    subpacket: Subpacket<'a>,
+    reader: &mut Reader<'a>,
     time: u32,
+    tag: u8,
     id: &mut InternalSigInfo,
 ) -> Result<(), Error> {
-    let tag = subpacket.tag();
     match tag {
         // Subpackets invalid in this context
         // only valid in self-signature
@@ -214,53 +206,41 @@ fn process_subpacket<'a>(
             eprintln!("Unsupported packet!");
             Err(Error::IllFormedSignature)
         }
-        SUBPACKET_SIG_EXPIRATION_TIME |
-        SUBPACKET_CREATION_TIME => {
-            let timestamp = subpacket.contents().try_into();
-            let timestamp = u32::from_be_bytes(timestamp.map_err(|_|Error::IllFormedSignature)?);
-            if tag == SUBPACKET_SIG_EXPIRATION_TIME {
-                if id.expiration_time.is_some() {
-                    Err(Error::IllFormedSignature)
-                } else if time != 0 && timestamp >= time {
-                    Err(Error::SignatureExpired)
-                } else {
-                    id.expiration_time = Some(timestamp);
-                    Ok(())
-                }
+        SUBPACKET_SIG_EXPIRATION_TIME => {
+            let timestamp = reader.be_u32()?;
+            if time != 0 && timestamp >= time {
+                Err(Error::SignatureExpired)
+            } else if std::mem::replace(&mut id.expiration_time, Some(timestamp)).is_some() {
+                Err(Error::IllFormedSignature)
             } else {
-                if id.creation_time.is_some() {
-                    Err(Error::IllFormedSignature)
-                } else if time != 0 && timestamp < time {
-                    Err(Error::SignatureNotValidYet)
-                } else {
-                    id.creation_time = Some(timestamp);
-                    Ok(())
-                }
+                Ok(())
             }
-        },
+        }
+        SUBPACKET_CREATION_TIME => {
+            let timestamp = reader.be_u32()?;
+            if time != 0 && timestamp < time {
+                Err(Error::SignatureNotValidYet)
+            } else if std::mem::replace(&mut id.creation_time, Some(timestamp)).is_some() {
+                Err(Error::IllFormedSignature)
+            } else {
+                Ok(())
+            }
+        }
         SUBPACKET_ISSUER_KEYID => {
-            if id.id.is_some(){
-                return Err(Error::IllFormedSignature)
+            if id.id.is_some() {
+                return Err(Error::IllFormedSignature);
             }
-            id.id = Some(subpacket.contents().try_into().map_err(|_| Error::IllFormedSignature)?);
+            id.id = Some(reader.get_bytes(8)?.try_into().expect("length correct"));
             Ok(())
         }
         // RPM doesn’t care about this, but we do
-        SUBPACKET_FINGERPRINT => {
-            match subpacket.contents().split_first() {
-                Some((4, fpr)) if fpr.len() == 20 && id.fpr.is_none() => {
-                    #[cfg(test)]
-                    eprintln!("Fingerprint is {:?}", fpr);
-                    id.fpr = Some(fpr.try_into().expect("length is correct; qed"));
-                    Ok(())
-                }
-                _ => {
-                    #[cfg(test)]
-                    eprintln!("Bad fingerprint subpacket!");
-                    Err(Error::IllFormedSignature)
-                }
+        SUBPACKET_FINGERPRINT => match reader.get_bytes(21)? {
+            &[4, ref fpr @ ..] if id.fpr.is_none() => {
+                id.fpr = Some(fpr.try_into().expect("length is correct; qed"));
+                Ok(())
             }
-        }
+            _ => Err(Error::IllFormedSignature),
+        },
         // We reject unknown subpackets to make exploits against RPM less likely
         SUBPACKET_NOTATION |
         SUBPACKET_POLICY_URI |
@@ -273,7 +253,7 @@ pub fn parse<'a>(
     data: &'a [u8],
     timestamp: u32,
     allow_sha1_sha224: AllowWeakHashes,
-) -> Result<SigInfo<'a>, Error> {
+) -> Result<SigInfo, Error> {
     Reader::read_all(data, Error::TrailingJunk, |reader| {
         read_signature(reader, timestamp, allow_sha1_sha224)
     })
@@ -284,12 +264,9 @@ pub fn read_signature<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
     allow_sha1_sha224: AllowWeakHashes,
-) -> Result<SigInfo<'a>, Error> {
+) -> Result<SigInfo, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
-    let tag = packet.tag();
-    if tag != 2 {
-        #[cfg(test)]
-        eprintln!("Tag is {} - this is not a signature!", tag);
+    if packet.tag() != 2 {
         return Err(Error::IllFormedSignature);
     }
     Reader::read_all(packet.contents(), Error::TrailingJunk, |e| {
@@ -301,7 +278,7 @@ fn parse_packet_body<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
     allow_sha1_sha224: AllowWeakHashes,
-) -> Result<SigInfo<'a>, Error> {
+) -> Result<SigInfo, Error> {
     let version = reader.byte()?;
     #[cfg(test)]
     eprintln!("Version is {}", version);
@@ -314,40 +291,16 @@ fn parse_packet_body<'a>(
         creation_time: None,
         expiration_time: None,
     };
-    let (subpackets, mpis) = match version {
+    match version {
         3 => {
             if reader.byte()? != 5 || reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
-                #[cfg(test)]
-                eprintln!("Bad version 3 signature!");
                 return Err(Error::IllFormedSignature);
             }
             siginfo.creation_time = Some(reader.be_u32()?);
-            key_id = u64::to_le_bytes(reader.le_u64()?);
+            key_id = u64::to_be_bytes(reader.be_u64()?);
             // Get the public-key algorithm
             pkey_alg = reader.byte()?;
-            let mpis = match pkey_alg {
-                OPENPGP_PUBLIC_KEY_RSA => 1,
-                OPENPGP_PUBLIC_KEY_DSA => 2,
-
-                // Prohibited algorithm
-                OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT |
-                // ECDSA and EdDSA require v4 signatures
-                OPENPGP_PUBLIC_KEY_ECDSA |
-                OPENPGP_PUBLIC_KEY_EDDSA |
-                // Encryption algorithms
-                OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY |
-                OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY |
-                OPENPGP_PUBLIC_KEY_ECDH |
-                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidPkeyAlgorithm(pkey_alg)),
-
-                // Unsupported legacy algoritms
-                OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY |
-                _ => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
-            };
             hash_alg = reader.byte()?;
-            check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
-            let iter = SubpacketIterator::empty();
-            (iter, mpis)
         }
         4 => {
             // Signature type; we only allow OPENPGP_SIGNATURE_TYPE_BINARY
@@ -355,56 +308,42 @@ fn parse_packet_body<'a>(
                 return Err(Error::IllFormedSignature);
             }
             pkey_alg = reader.byte()?;
-            let mpis = match pkey_alg {
-                OPENPGP_PUBLIC_KEY_RSA => 1,
-                // RPM does not support ECDSA
-                OPENPGP_PUBLIC_KEY_ECDSA => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
-                OPENPGP_PUBLIC_KEY_EDDSA | OPENPGP_PUBLIC_KEY_DSA => 2,
-
-                // Prohibited algorithm
-                OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT |
-                // Encryption algorithms
-                OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY |
-                OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY |
-                OPENPGP_PUBLIC_KEY_ECDH |
-                OPENPGP_PUBLIC_KEY_DH => return Err(Error::InvalidPkeyAlgorithm(pkey_alg)),
-
-                // Unsupported legacy algoritms
-                OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY |
-                _ => return Err(Error::UnsupportedPkeyAlgorithm(pkey_alg)),
-            };
-            #[cfg(test)]
-            eprintln!("Signature algorithm is {}", pkey_alg);
             hash_alg = reader.byte()?;
-            check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
-            #[cfg(test)]
-            eprintln!("digest algo {}", hash_alg);
-            let subpackets = subpacket::SubpacketIterator::read_u16_prefixed(reader)?;
-            for subpacket in subpackets.clone() {
-                process_subpacket(subpacket, timestamp, &mut siginfo)?
-            }
+            Reader::read_all(
+                get_length_bytes(reader, 2)?,
+                Error::TrailingJunk,
+                |reader| {
+                    Ok(while !reader.is_empty() {
+                        Reader::read_all(
+                            get_varlen_bytes(reader)?,
+                            Error::TrailingJunk,
+                            |reader| {
+                                let tag_byte = reader.byte()?;
+                                process_subpacket(reader, timestamp, tag_byte & 0x7F, &mut siginfo)
+                            },
+                        )?
+                    })
+                },
+            )?;
             // The only non-hashed subpacket allowed is the key ID, and only if
             // it has not already been seen.
             key_id = match siginfo.id {
-                None => {
-                    if reader.get_bytes(4)? != &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
-                        return Err(Error::IllFormedSignature);
-                    }
+                None if reader.get_bytes(4)? == &[0, 10, 9, SUBPACKET_ISSUER_KEYID] => {
                     reader.get_bytes(8)?.try_into().expect("length correct")
                 }
                 Some(e) if reader.be_u16()? == 0 => e,
-                Some(_) => return Err(Error::IllFormedSignature),
+                _ => return Err(Error::IllFormedSignature),
             };
             if let Some(s) = siginfo.fpr {
                 if s[12..] != key_id[..] {
                     return Err(Error::IllFormedSignature);
                 }
             }
-
-            (subpackets, mpis)
         }
         _ => return Err(Error::IllFormedSignature),
-    };
+    }
+    let mpis = pkey_alg_mpis(pkey_alg, version)?;
+    check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
     // Check the creation time
     let creation_time = match siginfo.creation_time {
         Some(t) => t,
@@ -416,18 +355,14 @@ fn parse_packet_body<'a>(
     for _ in 0..mpis {
         read_mpi(reader)?;
     }
-    match reader.is_empty() {
-        true => Ok(SigInfo {
-            hash_alg,
-            pkey_alg,
-            creation_time,
-            expiration_time: siginfo.expiration_time,
-            key_id,
-            subpackets,
-            fingerprint: siginfo.fpr,
-        }),
-        false => Err(Error::IllFormedSignature),
-    }
+    Ok(SigInfo {
+        hash_alg,
+        pkey_alg,
+        creation_time,
+        expiration_time: siginfo.expiration_time,
+        key_id,
+        fingerprint: siginfo.fpr,
+    })
 }
 
 #[cfg(test)]
@@ -458,8 +393,8 @@ mod tests {
             Error::PrematureEOF
         );
         let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0, AllowWeakHashes::No).unwrap();
-        assert_eq!(u64::from_be_bytes(sig.key_id()), 0x28A45C93B0B5B6E0);
-        assert_eq!(sig.creation_time(), 1611626266);
-        assert_eq!(sig.fingerprint().unwrap()[12..], sig.key_id()[..]);
+        assert_eq!(u64::from_be_bytes(sig.key_id), 0x28A45C93B0B5B6E0);
+        assert_eq!(sig.creation_time, 1611626266);
+        assert_eq!(sig.fingerprint.unwrap()[12..], sig.key_id[..]);
     }
 }

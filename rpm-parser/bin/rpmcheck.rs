@@ -6,9 +6,10 @@ fn main() -> Result<()> {
     if args.next().is_none() {
         return Ok(());
     };
+    let token = rpm_parser::init();
     for i in args {
         let mut s = File::open(i)?;
-        let package = rpm_parser::RPMPackage::read(&mut s, AllowWeakHashes::No)?;
+        let package = rpm_parser::RPMPackage::read(&mut s, AllowWeakHashes::No, token)?;
         package
             .signature
             .header_signature

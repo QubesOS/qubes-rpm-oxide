@@ -111,7 +111,8 @@ fn verify_package(
         main_header_bytes
     };
     let hdr_digest = {
-        let mut hdr_digest = DigestCtx::init(8, AllowWeakHashes::No, token).expect("SHA-256 is supported");
+        let mut hdr_digest =
+            DigestCtx::init(8, AllowWeakHashes::No, token).expect("SHA-256 is supported");
         hdr_digest.update(&main_header_bytes);
         hdr_digest.finalize(true)
     };
@@ -173,8 +174,13 @@ fn process_file(
     let _ = rpm_parser::read_lead(&mut s)?;
     // Read the signature header
     let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
-    let (immutable, tag, sig, main_header_bytes, hdr_digest) =
-        verify_package(&mut s, &mut sig_header, &tx.keyring(), allow_old_pkgs, token)?;
+    let (immutable, tag, sig, main_header_bytes, hdr_digest) = verify_package(
+        &mut s,
+        &mut sig_header,
+        &tx.keyring(),
+        allow_old_pkgs,
+        token,
+    )?;
     // 167 = 96 + 16 + 16 + 16 + 16 + 16 + 65 + 7
     let magic_offset = 96;
     let index_offset = magic_offset + 16;
@@ -261,7 +267,15 @@ fn inner_main() -> i32 {
     if directory {
         todo!()
     }
-    match process_file(&tx, &src, &dst, allow_sha1_sha224, sigcheck, allow_old_pkgs, token) {
+    match process_file(
+        &tx,
+        &src,
+        &dst,
+        allow_sha1_sha224,
+        sigcheck,
+        allow_old_pkgs,
+        token,
+    ) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Error canonicalizing file: {}", e);

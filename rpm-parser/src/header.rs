@@ -32,13 +32,14 @@ mod tests {
     use openpgp_parser::AllowWeakHashes;
     #[test]
     fn parses_lua_rpm() {
+        let token = crate::init();
         const S: &[u8] = include_bytes!("../../lua-5.4.2-1.fc33.x86_64.rpm");
         let mut r = &S[96..];
         let SignatureHeader {
             header: _,
             header_signature,
             header_payload_signature,
-        } = load_signature(&mut r, AllowWeakHashes::No).unwrap();
+        } = load_signature(&mut r, AllowWeakHashes::No, token).unwrap();
         assert!(header_signature.is_some());
         assert!(header_payload_signature.is_some());
         let ImmutableHeader {
@@ -52,7 +53,8 @@ mod tests {
             os,
             arch,
             source,
-        } = load_immutable(&mut r).unwrap();
+            ..
+        } = load_immutable(&mut r, token).unwrap();
         let payload_digest = payload_digest.unwrap();
         assert_eq!(payload_digest.len(), 65);
         assert_eq!(payload_digest_algorithm.unwrap(), 8);
@@ -63,7 +65,7 @@ mod tests {
         assert_eq!(&*os, "linux");
         assert_eq!(&*arch, "x86_64");
         assert!(!source);
-        let mut digest_ctx = DigestCtx::init(8, AllowWeakHashes::No).unwrap();
+        let mut digest_ctx = DigestCtx::init(8, AllowWeakHashes::No, token).unwrap();
         digest_ctx.update(r);
         assert_eq!(digest_ctx.finalize(true), payload_digest);
     }

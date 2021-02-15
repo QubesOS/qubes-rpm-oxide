@@ -1,5 +1,5 @@
-use openpgp_parser::{signature, AllowWeakHashes, Error};
 use super::InitToken;
+use openpgp_parser::{signature, AllowWeakHashes, Error};
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
@@ -22,8 +22,8 @@ impl Signature {
         let r = unsafe { pgpPrtParams(slice.as_ptr(), slice.len(), 2, &mut params) };
         assert!(r == 0, "we accepted a signature RPM rejected");
         assert!(!params.0.is_null());
-        assert_eq!(params.hash_algorithm(), sig_info.hash_alg());
-        assert_eq!(params.public_key_algorithm(), sig_info.pkey_alg());
+        assert_eq!(params.hash_algorithm(), sig_info.hash_alg);
+        assert_eq!(params.public_key_algorithm(), sig_info.pkey_alg);
         Ok(params)
     }
 

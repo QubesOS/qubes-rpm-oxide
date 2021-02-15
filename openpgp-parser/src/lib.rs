@@ -39,6 +39,8 @@ pub enum Error {
     TooLong,
     /// Packet is truncated
     PrematureEOF,
+    /// Unsupported signature version
+    UnsupportedSignatureVersion,
     /// Indefinite-length old format packet detected.  These are not supported.
     IndefiniteLength,
     /// Partial-length new format packet detected.  These are not supported.
@@ -53,12 +55,16 @@ pub enum Error {
     IllFormedSignature,
     /// Unsupported hash algorithm
     UnsupportedHashAlgorithm(i32),
+    /// Unknown public-key algorithm
+    UnknownPkeyAlgorithm(u8),
     /// Unsupported public-key algorithm
     UnsupportedPkeyAlgorithm(u8),
     /// Insecure algorithm
     InsecureAlgorithm(i32),
     /// Invalid public-key algorithm (such as an encryption algorithm uesd for signatures)
     InvalidPkeyAlgorithm(u8),
+    /// Public-key algorithm requires v4 signature
+    PkeyAlgorithmRequiresV4Sig(u8),
     /// Signature not valid yet
     SignatureNotValidYet,
     /// Signature expired

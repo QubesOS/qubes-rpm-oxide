@@ -5,7 +5,7 @@
 
 use crate::{
     header::{ImmutableHeader, SignatureHeader},
-    load_immutable, load_signature, read_lead, RPMLead, InitToken
+    load_immutable, load_signature, read_lead, InitToken, RPMLead,
 };
 use openpgp_parser::AllowWeakHashes;
 use std::io::{Read, Result};
@@ -21,7 +21,11 @@ include!("tables.rs");
 
 impl RPMPackage {
     /// Load a package from `r`
-    pub fn read(r: &mut dyn Read, allow_sha1_sha224: AllowWeakHashes, token: InitToken) -> Result<Self> {
+    pub fn read(
+        r: &mut dyn Read,
+        allow_sha1_sha224: AllowWeakHashes,
+        token: InitToken,
+    ) -> Result<Self> {
         let lead = read_lead(r)?;
         let signature = load_signature(r, allow_sha1_sha224, token)?;
         let immutable = load_immutable(r, token)?;
@@ -79,11 +83,12 @@ mod tests {
     #[test]
     fn parses_lua_rpm() {
         let mut s: &[u8] = include_bytes!("../../lua-5.4.2-1.fc33.x86_64.rpm");
+        let token = crate::init();
         let RPMPackage {
             lead: _,
             signature,
             immutable,
-        } = RPMPackage::read(&mut s, AllowWeakHashes::No).unwrap();
+        } = RPMPackage::read(&mut s, AllowWeakHashes::No, token).unwrap();
         let SignatureHeader {
             header: _,
             header_signature,

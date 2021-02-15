@@ -140,7 +140,7 @@ mod tests {
         for &i in &[8, 9, 10] {
             assert_eq!(
                 unsafe { rpmDigestLength(i) },
-                check_hash_algorithm(i, AllowWeakHashes::No, init()).unwrap().into()
+                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
             );
         }
     }

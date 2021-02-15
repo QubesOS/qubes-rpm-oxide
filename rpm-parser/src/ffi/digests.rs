@@ -49,7 +49,11 @@ impl std::io::Write for DigestCtx {
 
 impl DigestCtx {
     /// Initialize an RPM digest context
-    pub fn init(algorithm: u8, allow_sha1_sha224: AllowWeakHashes, _: super::InitToken) -> Result<DigestCtx, ()> {
+    pub fn init(
+        algorithm: u8,
+        allow_sha1_sha224: AllowWeakHashes,
+        _: super::InitToken,
+    ) -> Result<DigestCtx, ()> {
         use openpgp_parser::signature::check_hash_algorithm;
         super::init();
         let len = check_hash_algorithm(algorithm.into(), allow_sha1_sha224).map_err(drop)?;
