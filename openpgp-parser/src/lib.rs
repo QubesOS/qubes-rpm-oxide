@@ -28,6 +28,9 @@ mod buffer;
 pub mod packet;
 pub mod signature;
 
+#[cfg(target_pointer_width = "16")]
+compile_error!("Sorry, 16-bit targets not supported");
+
 pub use signature::AllowWeakHashes;
 
 /// Errors that can occur during parsing
@@ -73,10 +76,4 @@ pub enum Error {
     NoCreationTime,
     /// Unsupported critical subpacket
     UnsupportedCriticalSubpacket,
-}
-
-impl From<core::num::TryFromIntError> for Error {
-    fn from(_e: core::num::TryFromIntError) -> Error {
-        Error::TooLong
-    }
 }

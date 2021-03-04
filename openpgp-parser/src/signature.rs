@@ -1,9 +1,9 @@
 //! OpenPGP signatures
 
 use super::{packet, Error, Reader};
-use packet::{get_length_bytes, get_varlen_bytes};
+use packet::get_varlen_bytes;
 
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryInto;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 /// Should weak hashes (less than 256 bits and vulnerable to collisions) be allowed?
@@ -18,14 +18,14 @@ pub enum AllowWeakHashes {
 /// slice.
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     reader.read(|reader| {
-        let bits = packet::get_be_u32(reader, 2)? + 7;
-        let mpi_buf = reader.get_bytes(usize::try_from(bits)? >> 3)?;
+        let bits = 7 + usize::from(reader.be_u16()?);
+        let mpi_buf = reader.get_bytes(bits >> 3)?;
         // don’t use ‘Reader::byte’, which mutates the reader
         if let Some(first_byte) = mpi_buf.get(0) {
             // check that there are no spurious leading zeros
             // this is not valid for encrypted MPIs, but we don’t deal with
             // them, as we only parse signatures
-            if first_byte.leading_zeros() + (bits & 7) != 7 {
+            if first_byte.leading_zeros() as usize + (bits & 7) != 7 {
                 return Err(Error::BadMPI);
             }
         }
@@ -309,8 +309,9 @@ fn parse_packet_body<'a>(
             }
             pkey_alg = reader.byte()?;
             hash_alg = reader.byte()?;
+            let hashed_subpackets = reader.be_u16()?;
             Reader::read_all(
-                get_length_bytes(reader, 2)?,
+                reader.get_bytes(hashed_subpackets.into())?,
                 Error::TrailingJunk,
                 |reader| {
                     Ok(while !reader.is_empty() {

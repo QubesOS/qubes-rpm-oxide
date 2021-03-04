@@ -19,60 +19,19 @@ pub struct Packet<'a> {
     buffer: &'a [u8],
 }
 
-/// Get a series of `lenlen` big-endian bytes as a [`u32`].  Fails if `lenlen`
-/// is larger than 4 **or** larger than `std::mem::size_of::<usize>()`.
-/// Therefore, the return value will always be less than `usize::MAX`.
-///
-/// ```rust
-/// # use openpgp_parser::{packet::get_be_u32, Reader};
-/// let mut reader = Reader::new(&[1, 2, 3, 4, 5]);
-/// assert!(get_be_u32(&mut reader, 5).is_err());
-/// assert_eq!(get_be_u32(&mut reader, 3).unwrap(), 0x10203);
-/// assert!(get_be_u32(&mut reader, 3).is_err());
-/// assert_eq!(get_be_u32(&mut reader, 1).unwrap(), 4);
-/// assert_eq!(reader.len(), 1);
-/// assert_eq!(reader.byte().unwrap(), 0x5);
-/// ```
-pub fn get_be_u32(reader: &mut Reader, lenlen: u8) -> Result<u32, Error> {
-    reader.read(|reader| {
-        let mut len = 0u32;
-        if lenlen > 4 || usize::from(lenlen) > core::mem::size_of::<usize>() {
-            return Err(Error::TooLong);
-        }
-        for &i in reader.get_bytes(usize::from(lenlen))? {
-            len = len << 8 | u32::from(i)
-        }
-        Ok(len)
-    })
-}
-
-/// Reads `lenlen` bytes of data as a `u32` using [`Self::get_be_u32`], then
-/// reads that number of bytes.  Returns [`Error::TooLong`] if `lenlen > 4`, or
-/// [`Error::PrematureEOF`] if `Self` is too short.
-pub fn get_length_bytes<'a>(reader: &mut Reader<'a>, lenlen: u8) -> Result<&'a [u8], Error> {
-    reader.read(|reader| {
-        // `as` is harmless, as `get_be_u32` already checks that its return
-        // value fits in a `usize`
-        let len = get_be_u32(reader, lenlen)? as usize;
-        Ok(reader.get_bytes(len)?)
-    })
-}
-
 pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     let keybyte: u8 = reader.byte()?;
     #[cfg(test)]
     eprintln!("Keybyte is {}, reader length is {}", keybyte, reader.len());
-    Ok(match keybyte {
-        0..=191 => reader.get_bytes(keybyte.into())?,
-        192..=223 => {
-            let len = ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192;
-            reader.get_bytes(len)?
-        }
+    let len: usize = match keybyte {
+        0..=191 => keybyte.into(),
+        192..=223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
         // Partial lengths are deliberately unsupported, as we don’t handle PGP signed and/or
         // encrypted data ourselves.
         224..=254 => return Err(Error::PartialLength),
-        255 => get_length_bytes(reader, 4)?,
-    })
+        255 => reader.be_u32()? as _,
+    };
+    Ok(reader.get_bytes(len)?)
 }
 
 /// Read a packet from `reader`.  Returns:
@@ -89,12 +48,18 @@ pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
     #[cfg(test)]
     eprintln!("Tag byte is 0b{:b}", tagbyte);
     let packet = if tagbyte & 0x40 == 0 {
+        let lenlen = 1u8 << (tagbyte & 0b11);
         // We deliberately do not support indefinite-length packets.
-        // Just let `get_length_bytes` detect that (1u8 << 0b11) > 4 and bail out.
-        let buffer = get_length_bytes(reader, 1u8 << (tagbyte & 0b11))?;
+        if lenlen > 4 {
+            return Err(Error::PartialLength);
+        }
+        let mut len = 0usize;
+        for &i in reader.get_bytes(usize::from(lenlen))? {
+            len = len << 8 | usize::from(i)
+        }
         Packet {
             tag: 0xF & (tagbyte >> 2),
-            buffer,
+            buffer: reader.get_bytes(len)?,
         }
     } else {
         let buffer = get_varlen_bytes(reader)?;
