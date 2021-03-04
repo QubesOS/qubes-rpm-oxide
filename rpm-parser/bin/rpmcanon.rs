@@ -138,6 +138,7 @@ fn verify_package(
         )
     })?;
     let main_header = rpm_parser::load_immutable(&mut &*main_header_bytes, token)?;
+    // This header is signed, so its payload digest is trusted
     validator.dgst = match main_header.payload_digest() {
         Ok(s) => {
             untrusted_sig_body = reserialize_parsed_sig(&sig_bytes);
