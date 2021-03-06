@@ -87,13 +87,14 @@ pub(super) fn load_header<'a>(
         TagData::as_bytes_mut(&mut trailer_array).copy_from_slice(&data[region_offset as _..]);
         let [trailer] = trailer_array;
         let trailer_offset = trailer.offset() as i32;
-        if last_tag != trailer.tag()
-            || TagType::Bin as u32 != trailer.ty()
-            || 16 != trailer.count()
-            || trailer_offset > 0
-            || trailer_offset + (16 * index_length) as i32 != 0
-        {
-            bad_data!("bad region trailer {:?}", trailer)
+        if last_tag != trailer.tag() {
+            bad_data!("bad region trailer tag {}", trailer.tag())
+        } else if TagType::Bin as u32 != trailer.ty() {
+            bad_data!("bad region trailer type {}", trailer.ty())
+        } else if 16 != trailer.count() {
+            bad_data!("bad region trailer count {}", trailer.count())
+        } else if trailer_offset > 0 || trailer_offset + (16 * index_length) as i32 != 0 {
+            bad_data!("bad region trailer offset {}", trailer_offset)
         }
     }
     let mut cursor = 0;

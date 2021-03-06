@@ -1,5 +1,7 @@
 use openpgp_parser::AllowWeakHashes;
 use rpm_parser::{DigestCtx, TagData, TagType};
+use rpm_writer::{HeaderEntry, HeaderBuilder};
+use std::ffi::CStr;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{copy, Error, ErrorKind, Read, Result, Seek, SeekFrom, Write};
@@ -184,45 +186,14 @@ fn process_file(
     )?;
     // 167 = 96 + 16 + 16 + 16 + 16 + 16 + 65 + 7
     let magic_offset = 96;
-    let index_offset = magic_offset + 16;
-    let sig_offset = index_offset + 16 * 3;
-    let trailer_offset = sig_offset + sig.len() + hdr_digest.len();
-    let end_trailer = trailer_offset + 16;
-    let mut out_data = vec![0; (7 + end_trailer) & !7usize];
+    let mut hdr = HeaderBuilder::new(rpm_writer::HeaderKind::Signature);
+    hdr.push(RPMTAG_SHA256HEADER, HeaderEntry::String(CStr::from_bytes_with_nul(&hdr_digest).expect("RPM NUL-terminates its hex data")));
+    hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*sig));
+    let mut out_data = vec![0; magic_offset];
     out_data[..magic_offset].copy_from_slice(&immutable.lead());
-    let tags = {
-        let magic_tag = TagData::new(0x8eade801, 0, 3, (end_trailer - sig_offset) as _);
-        let trailer_tag = TagData::new(
-            62,
-            TagType::Bin as _,
-            (trailer_offset - sig_offset) as _,
-            16,
-        );
-        if tag > RPMTAG_SHA256HEADER {
-            let new_sig_offset = sig_offset + hdr_digest.len();
-            out_data[sig_offset..new_sig_offset].copy_from_slice(&hdr_digest);
-            out_data[new_sig_offset..trailer_offset].copy_from_slice(&*sig);
-            let hash_tag = TagData::new(RPMTAG_SHA256HEADER, TagType::String as _, 0, 1);
-            let sig_tag = TagData::new(
-                tag,
-                TagType::Bin as _,
-                hdr_digest.len() as _,
-                sig.len() as _,
-            );
-            [magic_tag, trailer_tag, hash_tag, sig_tag]
-        } else {
-            let digest_offset = sig_offset + sig.len();
-            out_data[sig_offset..digest_offset].copy_from_slice(&*sig);
-            out_data[digest_offset..trailer_offset].copy_from_slice(&hdr_digest);
-            let sig_tag = TagData::new(tag, TagType::Bin as _, 0, sig.len() as _);
-            let hash_tag =
-                TagData::new(RPMTAG_SHA256HEADER, TagType::String as _, sig.len() as _, 1);
-            [magic_tag, trailer_tag, sig_tag, hash_tag]
-        }
-    };
-    let trailer = &[TagData::new(62, TagType::Bin as _, (-48i32) as u32, 16)];
-    out_data[magic_offset..sig_offset].copy_from_slice(TagData::as_bytes(&tags[..]));
-    out_data[trailer_offset..end_trailer].copy_from_slice(TagData::as_bytes(trailer));
+    hdr.emit(&mut out_data).expect("writes to a vec never fail");
+    let fixup = (out_data.len() + 7 & !7) - out_data.len();
+    out_data.extend_from_slice(&[0u8; 7][..fixup]);
     rpm_parser::load_signature(&mut &out_data[magic_offset..], allow_sha1_sha224, token).unwrap();
     let mut dest = File::create(dst)?;
     dest.write_all(&out_data)?;
