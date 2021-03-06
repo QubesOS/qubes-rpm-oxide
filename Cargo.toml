@@ -1,5 +1,6 @@
 [workspace]
 members = [
    "rpm-parser",
+   "rpm-writer",
    "openpgp-parser",
 ]
