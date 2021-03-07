@@ -6,7 +6,7 @@ fn main() -> Result<()> {
     if args.next().is_none() {
         return Ok(());
     };
-    let token = rpm_parser::init();
+    let token = rpm_crypto::init();
     for i in args {
         let mut s = File::open(i)?;
         let package = rpm_parser::RPMPackage::read(&mut s, AllowWeakHashes::No, token)?;

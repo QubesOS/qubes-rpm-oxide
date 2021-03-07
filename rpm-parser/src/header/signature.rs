@@ -1,7 +1,8 @@
 use super::{check_hex, load_header, Header};
-use crate::ffi::{Signature, TagType};
+use crate::ffi::TagType;
 use crate::TagData;
 use openpgp_parser::AllowWeakHashes;
+use rpm_crypto::Signature;
 use std::io::{Read, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -64,7 +65,7 @@ pub struct SignatureHeader {
 pub fn load_signature(
     r: &mut dyn Read,
     allow_sha1_sha224: AllowWeakHashes,
-    token: crate::ffi::InitToken,
+    token: rpm_crypto::InitToken,
 ) -> Result<SignatureHeader> {
     let mut header_signature = None;
     let mut header_payload_signature = None;
@@ -105,13 +106,19 @@ pub fn load_signature(
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };
+                let sig_packet =
+                    openpgp_parser::packet::next(&mut openpgp_parser::Reader::new(body))
+                        .expect("already validated above; qed")
+                        .expect("already validated above; qed")
+                        .serialize();
+
                 match std::mem::replace(
                     if flags == Flags::HeaderSig {
                         &mut header_signature
                     } else {
                         &mut header_payload_signature
                     },
-                    Some((sig, body.to_owned())),
+                    Some((sig, sig_packet)),
                 ) {
                     Some(_) => bad_data!("more than one signature of the same type"),
                     None => Ok(()),

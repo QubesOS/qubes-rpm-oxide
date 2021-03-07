@@ -1,76 +1,9 @@
 //! FFI code
-#![forbid(improper_ctypes)]
-use openpgp_parser::{AllowWeakHashes, Error};
-
-/// An OpenPGP signature
-pub struct Signature {
-    sig: RawSignature,
-    ctx: DigestCtx,
-}
-
-pub use init::{init, InitToken};
-
-mod init {
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    pub struct InitToken(());
-    pub fn init() -> InitToken {
-        use std::sync::Once;
-        static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
-        use std::os::raw::{c_char, c_int};
-        use std::ptr;
-        #[link(name = "rpm")]
-        extern "C" {
-            fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
-        }
-        RPM_CRYPTO_INIT_ONCE
-            .call_once(|| assert_eq!(unsafe { rpmReadConfigFiles(ptr::null(), ptr::null()) }, 0));
-        InitToken(())
-    }
-}
-
-impl Signature {
-    /// Parse an OpenPGP signature.  The signature is validated before being
-    /// passed to RPM.  If the time is not zero, the signature is checked to not
-    /// be from the future and to not have expired.
-    pub fn parse(
-        untrusted_buffer: &[u8],
-        time: u32,
-        allow_sha1_sha224: AllowWeakHashes,
-        token: InitToken,
-    ) -> Result<Self, Error> {
-        let sig = RawSignature::parse(untrusted_buffer, time, allow_sha1_sha224, token)?;
-        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_sha1_sha224, token)
-            .expect("Digest algorithm already validated");
-        Ok(Self { sig, ctx })
-    }
-
-    /// Update the sigatures’s internal digest context with data from `buf`.
-    pub fn update(&mut self, buf: &[u8]) {
-        self.ctx.update(buf)
-    }
-
-    pub fn public_key_algorithm(&self) -> u8 {
-        self.sig.public_key_algorithm()
-    }
-}
-
-mod digests;
-mod signatures;
-mod transaction;
-use signatures::Signature as RawSignature;
-
-pub use digests::DigestCtx;
-pub use transaction::{RpmKeyring, RpmTransactionSet};
 
 #[link(name = "rpm")]
 extern "C" {
     fn rpmTagGetType(tag: std::os::raw::c_int) -> std::os::raw::c_int;
     fn rpmTagTypeGetClass(tag: std::os::raw::c_int) -> std::os::raw::c_int;
-}
-
-#[link(name = "rpmio")]
-extern "C" {
-    fn rpmDigestLength(tag: std::os::raw::c_int) -> usize;
 }
 
 #[repr(u32)]
@@ -85,10 +18,6 @@ pub enum TagType {
     Bin = 7,
     StringArray = 8,
     I18NString = 9,
-}
-
-pub fn rpm_hash_len(alg: i32) -> usize {
-    unsafe { rpmDigestLength(alg) }
 }
 
 pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
@@ -134,34 +63,6 @@ pub fn tag_class(ty: TagType) -> std::os::raw::c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn check_rpm_supports_hashes() {
-        use openpgp_parser::signature::check_hash_algorithm;
-        for &i in &[8, 9, 10] {
-            assert_eq!(
-                unsafe { rpmDigestLength(i) },
-                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
-            );
-        }
-    }
-    #[test]
-    fn check_rpm_crypto() {
-        for &i in &[8, 9, 10] {
-            let mut s = DigestCtx::init(i, AllowWeakHashes::No, init()).unwrap();
-            println!("Initialized RPM crypto context");
-            s.update(b"this is a test!");
-            println!("Finalizing");
-            let hex = s.clone().finalize(true);
-            let len = hex.len();
-            assert!(len & 1 == 1);
-            assert_eq!(hex[len - 1], 0);
-            println!(
-                "Hex version: {}",
-                std::str::from_utf8(&hex[..len - 1]).unwrap()
-            );
-            println!("{:?}", s.finalize(false))
-        }
-    }
     #[test]
     fn check_rpm_return() {
         for i in 0..0x8000 {

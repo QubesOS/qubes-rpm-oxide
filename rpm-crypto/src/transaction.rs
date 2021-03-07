@@ -1,4 +1,6 @@
+use super::{DigestCtx, InitToken, RawSignature, Signature};
 use std::os::raw::c_int;
+
 enum Rpmts {}
 enum RpmKeyring_ {}
 #[repr(transparent)]
@@ -42,7 +44,7 @@ impl Clone for RpmTransactionSet {
 }
 
 impl RpmTransactionSet {
-    pub fn new(_: super::InitToken) -> Self {
+    pub fn new(_: InitToken) -> Self {
         unsafe { rpmtsCreate() }
     }
 
@@ -54,13 +56,13 @@ impl RpmTransactionSet {
 }
 
 impl RpmKeyring {
-    pub fn validate_sig(&self, sig: super::Signature) -> Result<(), c_int> {
+    pub fn validate_sig(&self, sig: Signature) -> Result<(), c_int> {
         #[link(name = "rpm")]
         extern "C" {
             fn rpmKeyringVerifySig(
                 keyring: *mut RpmKeyring_,
-                sig: super::signatures::Signature,
-                ctx: super::DigestCtx,
+                sig: RawSignature,
+                ctx: DigestCtx,
             ) -> c_int;
         }
         match unsafe { rpmKeyringVerifySig(self.0, sig.sig, sig.ctx) } {

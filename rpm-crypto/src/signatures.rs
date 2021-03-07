@@ -4,7 +4,7 @@ use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
 #[repr(transparent)]
-pub(super) struct Signature(*mut RpmPgpDigParams);
+pub struct Signature(*mut RpmPgpDigParams);
 
 impl Signature {
     pub fn parse(

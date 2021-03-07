@@ -3,8 +3,13 @@ use std::os::raw::{c_int, c_void};
 use std::ptr;
 
 enum ExternDigestCtx {}
+
 #[repr(transparent)]
 pub struct DigestCtx(*mut ExternDigestCtx);
+
+pub fn rpm_hash_len(alg: i32) -> usize {
+    unsafe { rpmDigestLength(alg) }
+}
 
 #[link(name = "c")]
 extern "C" {
@@ -13,6 +18,7 @@ extern "C" {
 
 #[link(name = "rpmio")]
 extern "C" {
+    fn rpmDigestLength(tag: std::os::raw::c_int) -> usize;
     fn rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
     fn rpmDigestInit(hash_algo: c_int, flags: u32) -> DigestCtx;
     fn rpmDigestUpdate(s: *mut ExternDigestCtx, data: *const c_void, len: usize) -> c_int;
@@ -55,15 +61,10 @@ impl DigestCtx {
         _: super::InitToken,
     ) -> Result<DigestCtx, ()> {
         use openpgp_parser::signature::check_hash_algorithm;
-        super::init();
         let len = check_hash_algorithm(algorithm.into(), allow_sha1_sha224).map_err(drop)?;
-        #[cfg(test)]
-        eprintln!("Hash algorithm {} accepted by us", algorithm);
-        if super::rpm_hash_len(algorithm.into()) != len.into() {
+        if rpm_hash_len(algorithm.into()) != len.into() {
             return Err(());
         }
-        #[cfg(test)]
-        eprintln!("Hash algorithm {} accepted by librpm", algorithm);
         let raw_p = unsafe { rpmDigestInit(algorithm.into(), 0) };
         assert!(!raw_p.0.is_null());
         Ok(raw_p)
@@ -89,6 +90,39 @@ impl DigestCtx {
             retval.set_len(len);
             free(p);
             retval
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn check_rpm_supports_hashes() {
+        use openpgp_parser::signature::check_hash_algorithm;
+        for &i in &[8, 9, 10] {
+            assert_eq!(
+                unsafe { rpmDigestLength(i) },
+                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
+            );
+        }
+    }
+    #[test]
+    fn check_rpm_crypto() {
+        for &i in &[8, 9, 10] {
+            let mut s = DigestCtx::init(i, AllowWeakHashes::No, crate::init()).unwrap();
+            println!("Initialized RPM crypto context");
+            s.update(b"this is a test!");
+            println!("Finalizing");
+            let hex = s.clone().finalize(true);
+            let len = hex.len();
+            assert!(len & 1 == 1);
+            assert_eq!(hex[len - 1], 0);
+            println!(
+                "Hex version: {}",
+                std::str::from_utf8(&hex[..len - 1]).unwrap()
+            );
+            println!("{:?}", s.finalize(false))
         }
     }
 }

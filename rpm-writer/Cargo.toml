@@ -6,12 +6,13 @@ edition = "2018"
 
 [dependencies]
 rpm-parser = { version = "0.1.0", path = "../rpm-parser" }
+rpm-crypto = { version = "0.1.0", path = "../rpm-crypto", optional = true }
 openpgp-parser = { version = "0.1.0", path = "../openpgp-parser", optional = true }
 
 [features]
-openpgp = ["openpgp-parser"]
+bin = ["openpgp-parser", "rpm-crypto"]
 
 [[bin]]
 name = "rpmcanon"
 path = "bin/rpmcanon.rs"
-required-features = ["openpgp-parser"]
+required-features = ["bin"]

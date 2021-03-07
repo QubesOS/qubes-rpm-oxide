@@ -5,9 +5,10 @@
 
 use crate::{
     header::{ImmutableHeader, SignatureHeader},
-    load_immutable, load_signature, read_lead, InitToken, RPMLead,
+    load_immutable, load_signature, read_lead, RPMLead,
 };
 use openpgp_parser::AllowWeakHashes;
+use rpm_crypto::InitToken;
 use std::io::{Read, Result};
 
 /// An RPM package
@@ -83,7 +84,7 @@ mod tests {
     #[test]
     fn parses_lua_rpm() {
         let mut s: &[u8] = include_bytes!("../../lua-5.4.2-1.fc33.x86_64.rpm");
-        let token = crate::init();
+        let token = rpm_crypto::init();
         let RPMPackage {
             lead: _,
             signature,

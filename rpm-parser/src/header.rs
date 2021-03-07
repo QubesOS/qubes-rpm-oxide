@@ -28,11 +28,10 @@ fn check_hex(untrusted_body: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::DigestCtx;
     use openpgp_parser::AllowWeakHashes;
     #[test]
     fn parses_lua_rpm() {
-        let token = crate::init();
+        let token = rpm_crypto::init();
         const S: &[u8] = include_bytes!("../../lua-5.4.2-1.fc33.x86_64.rpm");
         let mut r = &S[96..];
         let SignatureHeader {
@@ -65,7 +64,7 @@ mod tests {
         assert_eq!(&*os, "linux");
         assert_eq!(&*arch, "x86_64");
         assert!(!source);
-        let mut digest_ctx = DigestCtx::init(8, AllowWeakHashes::No, token).unwrap();
+        let mut digest_ctx = rpm_crypto::DigestCtx::init(8, AllowWeakHashes::No, token).unwrap();
         digest_ctx.update(r);
         assert_eq!(digest_ctx.finalize(true), payload_digest);
     }

@@ -2,5 +2,6 @@
 members = [
    "rpm-parser",
    "rpm-writer",
+   "rpm-crypto",
    "openpgp-parser",
 ]
