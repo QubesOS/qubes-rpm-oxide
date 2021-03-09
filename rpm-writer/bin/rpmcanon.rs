@@ -156,7 +156,8 @@ fn process_file(
                 res
             };
             if res < 0 {
-                if errno() == libc::ENOTSUP || errno() == libc::EPERM {
+                // Special case for /dev/null
+                if (errno() == libc::ENOTSUP || errno() == libc::EPERM) && fname == b"/dev/null" {
                     let ptr = CString::new(fname.as_bytes()).expect("NUL in command line banned");
                     res = libc::openat(
                         parent.as_raw_fd(),
