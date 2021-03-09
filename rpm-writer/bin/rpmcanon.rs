@@ -1,3 +1,6 @@
+#![feature(rustc_private)] // hack hack
+extern crate libc;
+
 use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::RpmTransactionSet;
 use rpm_writer::{HeaderBuilder, HeaderEntry};
@@ -7,7 +10,7 @@ use std::io::{copy, Result, Seek, SeekFrom, Write};
 use std::os::unix::{
     ffi::OsStrExt,
     fs::OpenOptionsExt,
-    io::{AsRawFd, FromRawFd, RawFd},
+    io::{AsRawFd, FromRawFd},
 };
 use std::path::Path;
 
@@ -71,7 +74,70 @@ fn process_file(
     out_data.extend_from_slice(&[0u8; 7][..fixup]);
     #[cfg(debug_assertions)]
     rpm_parser::load_signature(&mut &out_data[magic_offset..], allow_sha1_sha224, token).unwrap();
-    let mut dest = File::create(dst)?;
+    let (parent_dir, mut dest, fname, tmp_path) = {
+        let mut options = OpenOptions::new();
+        let path = Path::new(dst);
+        let (mut parent, fname) = match (path.parent(), path.file_name()) {
+            (Some(p), Some(s)) => (p, s),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot write to directory",
+                ))
+            }
+        };
+        if parent.as_os_str().is_empty() {
+            parent = Path::new(OsStr::from_bytes(b"."))
+        }
+        let parent = options
+            .mode(0o640)
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC)
+            .open(parent)?;
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut tmp_path: Option<CString> = None;
+        unsafe {
+            #[cfg(target_os = "linux")]
+            let res = {
+                static PATH: &[u8] = &*b".\0";
+                libc::openat(
+                    parent.as_raw_fd(),
+                    PATH.as_ptr() as *const libc::c_char,
+                    libc::O_WRONLY | libc::O_CLOEXEC | libc::O_TMPFILE,
+                    0o640,
+                )
+            };
+            #[cfg(not(target_os = "linux"))]
+            let res = {
+                extern "C" {
+                    fn getentropy(ptr: *const libc::c_void, size: libc::size_t) -> libc::c_int;
+                }
+                let mut rand: u64 = 0;
+                if getentropy(&mut rand as *mut u64 as *mut _, std::mem::size_of::<u64>()) != 0 {
+                    panic!("randomness error");
+                }
+                let s = format!("tmpfile-{}.UNTRUSTED\0", rand);
+                tmp_path = Some(CStr::from_bytes_with_nul(s.as_bytes()).unwrap().to_owned());
+                let mut res = libc::openat(
+                    parent.as_raw_fd(),
+                    s.as_ptr() as *const libc::c_char,
+                    libc::O_WRONLY | libc::O_CLOEXEC | libc::O_EXCL | libc::O_CREAT,
+                    0640,
+                );
+                res
+            };
+            if res < 0 {
+                let s = std::io::Error::last_os_error();
+                return Err(s);
+            }
+            (
+                parent,
+                File::from_raw_fd(res),
+                CString::new(fname.as_bytes()).expect("NUL in command line banned"),
+                tmp_path,
+            )
+        }
+    };
     dest.write_all(&out_data)?;
     dest.write_all(&main_header_bytes)?;
     s.seek(SeekFrom::Start(
@@ -81,6 +147,40 @@ fn process_file(
             + main_header_bytes.len()) as _,
     ))?;
     copy(&mut s, &mut dest)?;
+    if if cfg!(target_os = "linux") {
+        let proc_dir = format!("/proc/self/fd/{}\0", dest.as_raw_fd());
+        let c = CString::new(fname.as_bytes()).expect("NUL forbidden");
+        unsafe {
+            loop {
+                let i = libc::linkat(
+                    libc::AT_FDCWD,
+                    proc_dir.as_ptr() as *const _,
+                    parent_dir.as_raw_fd(),
+                    c.as_ptr() as *const _,
+                    libc::AT_SYMLINK_FOLLOW,
+                );
+                if i != -1 || *libc::__errno_location() != libc::EEXIST {
+                    break i;
+                }
+                if libc::unlinkat(parent_dir.as_raw_fd(), c.as_ptr() as *const _, 0) != 0 {
+                    break -1;
+                }
+            }
+        }
+    } else {
+        unsafe {
+            libc::renameat(
+                parent_dir.as_raw_fd(),
+                tmp_path.unwrap().as_ptr(),
+                parent_dir.as_raw_fd(),
+                fname.as_ptr(),
+            )
+        }
+    } < 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+
     Ok(())
 }
 
