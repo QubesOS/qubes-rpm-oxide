@@ -53,4 +53,4 @@ pub use header::{ImmutableHeader as MainHeader, SignatureHeader};
 pub use lead::{read_lead, RPMLead};
 pub use package::RPMPackage;
 pub use tagdata::TagData;
-pub use verify::verify_package;
+pub use verify::{verify_package, VerifyResult};

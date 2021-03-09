@@ -17,15 +17,17 @@ use std::path::Path;
 fn main() {
     std::process::exit(inner_main())
 }
+
 const RPMTAG_SIG_BASE: u32 = 256;
 const RPMSIGTAG_SHA256HEADER: u32 = RPMTAG_SIG_BASE + 17;
 const RPMSIGTAG_RSAHEADER: u32 = RPMTAG_SIG_BASE + 12;
+const RPMSIGTAG_PGP: u32 = 1002;
 
 fn usage(success: bool) -> i32 {
     const USAGE: &'static str = "Usage: rpmcanon [OPTIONS] -- SOURCE DESTINATION\n\n\
                                  Options:\n\n\
                                  --help print this message\n\
-                                 --insecure-skip-sigcheck skip signature checks\n\
+                                 --preserve-old-signature Preserve and require the RPMv3 (header+payload) signature\n\
                                  --allow-sha1-sha224 allow packages signed with SHA-1 or SHA-224\n\
                                  --allow-old-pkgs allow packages that don’t have a payload digest in the main header\n\
                                  --directory copy packages in SOURCE to DESTINATION; both directories must exist";
@@ -44,6 +46,7 @@ fn process_file(
     dst: &std::ffi::OsStr,
     allow_sha1_sha224: AllowWeakHashes,
     allow_old_pkgs: bool,
+    preserve_old_signature: bool,
     token: rpm_crypto::InitToken,
 ) -> Result<()> {
     let mut s = File::open(src)?;
@@ -51,11 +54,18 @@ fn process_file(
     let _ = rpm_parser::read_lead(&mut s)?;
     // Read the signature header
     let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
-    let (immutable, _tag, sig, main_header_bytes, hdr_digest) = rpm_parser::verify_package(
+    let rpm_parser::VerifyResult {
+        main_header,
+        header_payload_sig,
+        header_sig,
+        main_header_bytes,
+        main_header_hash,
+    } = rpm_parser::verify_package(
         &mut s,
         &mut sig_header,
         &tx.keyring(),
         allow_old_pkgs,
+        preserve_old_signature,
         token,
     )?;
     let magic_offset = 96;
@@ -63,12 +73,15 @@ fn process_file(
     hdr.push(
         RPMSIGTAG_SHA256HEADER,
         HeaderEntry::String(
-            CStr::from_bytes_with_nul(&hdr_digest).expect("RPM NUL-terminates its hex data"),
+            CStr::from_bytes_with_nul(&main_header_hash).expect("RPM NUL-terminates its hex data"),
         ),
     );
-    hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*sig));
+    hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*header_sig));
+    if let Some(ref sig) = header_payload_sig {
+        hdr.push(RPMSIGTAG_PGP, HeaderEntry::Bin(sig));
+    }
     let mut out_data = vec![0; magic_offset];
-    out_data[..magic_offset].copy_from_slice(&immutable.lead());
+    out_data[..magic_offset].copy_from_slice(&main_header.lead());
     hdr.emit(&mut out_data).expect("writes to a vec never fail");
     let fixup = (out_data.len() + 7 & !7) - out_data.len();
     out_data.extend_from_slice(&[0u8; 7][..fixup]);
@@ -190,7 +203,7 @@ fn inner_main() -> i32 {
     let mut allow_sha1_sha224 = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
     let mut directory = false;
-    let mut sigcheck = true;
+    let mut preserve_old_signature = false;
     let _ = match args.next() {
         Some(s) => s,
         None => return usage(false),
@@ -201,7 +214,7 @@ fn inner_main() -> i32 {
             b"--help" => return usage(true),
             b"--directory" => directory = true,
             b"--allow-old-pkgs" => allow_old_pkgs = true,
-            b"--insecure-skip-sigcheck" => sigcheck = false,
+            b"--preserve-old-signature" => preserve_old_signature = true,
             b"--" => break,
             _ => return usage(false),
         }
@@ -215,7 +228,15 @@ fn inner_main() -> i32 {
     if directory {
         todo!()
     }
-    match process_file(&tx, &src, &dst, allow_sha1_sha224, allow_old_pkgs, token) {
+    match process_file(
+        &tx,
+        &src,
+        &dst,
+        allow_sha1_sha224,
+        allow_old_pkgs,
+        preserve_old_signature,
+        token,
+    ) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("Error canonicalizing file: {}", e);

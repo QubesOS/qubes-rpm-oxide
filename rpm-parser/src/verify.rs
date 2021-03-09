@@ -39,16 +39,40 @@ impl Validator {
     }
 }
 
-const RPMSIGTAG_RSAHEADER: u32 = 256 + 12;
-const RPMSIGTAG_GPG: u32 = 1005;
+/// Package verification result
+pub struct VerifyResult {
+    /// The package main header
+    pub main_header: crate::MainHeader,
+    /// The header+payload signature.  [`None`] if no such signature should be written.
+    /// If such a signature is present in the original package, it will be verified even if this is
+    /// not necessary, but this field will still be [`None`].
+    pub header_payload_sig: Option<Vec<u8>>,
+    /// The header signature.  This library requires header signatures.
+    pub header_sig: Vec<u8>,
+    /// The bytes of the main header
+    pub main_header_bytes: Vec<u8>,
+    /// The SHA256 hash of the main header, hex-encoded with a trailing NUL
+    pub main_header_hash: Vec<u8>,
+}
 
+/// Verify a package
+///
+/// # Parameters
+///
+/// - `src`: The source of the package
+/// - `sig_header`: The signature header
+/// - `keyring`: The RPM keyring for verification
+/// - `allow_old_pkgs`: Allow packages without payload digests?
+/// - `preserve_old_sig`: Preserve the header+payload signature?
+/// - `token`: Token to prove that RPM has been initialized
 pub fn verify_package(
     src: &mut std::fs::File,
     sig_header: &mut SignatureHeader,
     keyring: &RpmKeyring,
     allow_old_pkgs: bool,
+    preserve_old_sig: bool,
     token: InitToken,
-) -> std::io::Result<(crate::MainHeader, u32, Vec<u8>, Vec<u8>, Vec<u8>)> {
+) -> std::io::Result<VerifyResult> {
     assert!(Validator {
         sig: None,
         dgst: None
@@ -59,12 +83,15 @@ pub fn verify_package(
         sig: None,
         dgst: None,
     };
-    let mut untrusted_sig_body = vec![];
-    if allow_old_pkgs {
-        if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {
-            validator.sig = Some(sig);
-            untrusted_sig_body = s_bytes;
-        }
+    let mut header_payload_sig = None;
+    if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {
+        validator.sig = Some(sig);
+        header_payload_sig = Some(s_bytes);
+    } else if preserve_old_sig {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Payload signature requested but not found",
+        ));
     }
     let mut prelude = [0u8; 16];
 
@@ -81,18 +108,17 @@ pub fn verify_package(
         src.read_exact(&mut main_header_bytes[16..])?;
         main_header_bytes
     };
-    let hdr_digest = {
-        let mut hdr_digest = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
+    let main_header_hash = {
+        let mut main_header_hash = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
             .expect("SHA-256 is supported");
-        hdr_digest.update(&main_header_bytes);
-        hdr_digest.finalize(true)
+        main_header_hash.update(&main_header_bytes);
+        main_header_hash.finalize(true)
     };
     assert_eq!(
         validator.write(&main_header_bytes).unwrap(),
         main_header_bytes.len()
     );
-    let mut output_sig_tag = RPMSIGTAG_GPG;
-    let (mut signature, sig_bytes) = sig_header
+    let (mut signature, header_sig) = sig_header
         .header_signature
         .take()
         .ok_or_else(|| Error::new(ErrorKind::InvalidData, "header not signed"))?;
@@ -112,8 +138,9 @@ pub fn verify_package(
     // This header is signed, so its payload digest is trusted
     validator.dgst = match main_header.payload_digest() {
         Ok(s) => {
-            untrusted_sig_body = sig_bytes;
-            output_sig_tag = RPMSIGTAG_RSAHEADER;
+            if !preserve_old_sig {
+                header_payload_sig = None
+            }
             Some(s)
         }
         Err(_) if allow_old_pkgs => None,
@@ -123,11 +150,11 @@ pub fn verify_package(
     validator
         .validate(&keyring)
         .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
-    Ok((
+    Ok(VerifyResult {
         main_header,
-        output_sig_tag,
-        untrusted_sig_body,
+        header_payload_sig,
+        header_sig,
         main_header_bytes,
-        hdr_digest,
-    ))
+        main_header_hash,
+    })
 }
