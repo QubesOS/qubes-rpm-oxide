@@ -5,25 +5,37 @@ use rpm_crypto::{transaction::RpmKeyring, DigestCtx, InitToken, Signature};
 use std::convert::TryInto;
 use std::io::{copy, Error, ErrorKind, Read, Result, Write};
 
-struct Validator {
+struct Validator<'a> {
     sig: Option<Signature>,
     dgst: Option<(DigestCtx, Vec<u8>)>,
+    output: Option<&'a mut dyn std::io::Write>,
 }
 
-impl std::io::Write for Validator {
+impl<'a> std::io::Write for Validator<'a> {
     fn write(&mut self, data: &[u8]) -> Result<usize> {
-        self.sig.as_mut().map(|s| s.update(data));
-        self.dgst.as_mut().map(|(c, _)| c.update(data));
-        Ok(data.len())
+        let len = match self.output {
+            None => data.len(),
+            Some(ref mut output) => output.write(data)?,
+        };
+        self.sig.as_mut().map(|s| s.update(&data[..len]));
+        self.dgst.as_mut().map(|(c, _)| c.update(&data[..len]));
+        Ok(len)
     }
     fn flush(&mut self) -> Result<()> {
-        Ok(())
+        match self.output {
+            None => Ok(()),
+            Some(ref mut s) => s.flush(),
+        }
     }
 }
 
-impl Validator {
+impl<'a> Validator<'a> {
     fn validate(self, keyring: &RpmKeyring) -> std::result::Result<(), ()> {
-        let Self { sig, dgst } = self;
+        let Self {
+            sig,
+            dgst,
+            output: _,
+        } = self;
         let mut retval = Err(());
         if let Some(s) = sig {
             let () = keyring.validate_sig(s).map_err(drop)?;
@@ -65,6 +77,8 @@ pub struct VerifyResult {
 /// - `allow_old_pkgs`: Allow packages without payload digests?
 /// - `preserve_old_sig`: Preserve the header+payload signature?
 /// - `token`: Token to prove that RPM has been initialized
+/// - `output`: Output stream that receives the (not yet validated!) bytes, for
+///   streaming support.
 pub fn verify_package(
     src: &mut std::fs::File,
     sig_header: &mut SignatureHeader,
@@ -72,16 +86,22 @@ pub fn verify_package(
     allow_old_pkgs: bool,
     preserve_old_sig: bool,
     token: InitToken,
+    mut cb: Option<
+        &mut dyn FnMut(&VerifyResult, Option<&mut dyn std::io::Write>) -> std::io::Result<()>,
+    >,
+    output: Option<&mut dyn std::io::Write>,
 ) -> std::io::Result<VerifyResult> {
     assert!(Validator {
         sig: None,
-        dgst: None
+        dgst: None,
+        output: None,
     }
     .validate(keyring)
     .is_err());
-    let mut validator = Validator {
+    let mut validator: Validator = Validator {
         sig: None,
         dgst: None,
+        output,
     };
     let mut header_payload_sig = None;
     if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {
@@ -114,10 +134,13 @@ pub fn verify_package(
         main_header_hash.update(&main_header_bytes);
         main_header_hash.finalize(true)
     };
+    let out = validator.output.take();
+    assert!(matches!(validator.output, None));
     assert_eq!(
         validator.write(&main_header_bytes).unwrap(),
         main_header_bytes.len()
     );
+    validator.output = out;
     let (mut signature, header_sig) = sig_header
         .header_signature
         .take()
@@ -146,15 +169,23 @@ pub fn verify_package(
         Err(_) if allow_old_pkgs => None,
         Err(e) => return Err(e),
     };
-    copy(src, &mut validator)?;
-    validator
-        .validate(&keyring)
-        .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
-    Ok(VerifyResult {
+    let vfy_result = VerifyResult {
         main_header,
         header_payload_sig,
         header_sig,
         main_header_bytes,
         main_header_hash,
-    })
+    };
+    if let Some(ref mut cb) = cb {
+        match validator.output.as_mut() {
+            None => cb(&vfy_result, None)?,
+            Some(output) => cb(&vfy_result, Some(output))?,
+        }
+    }
+    drop(cb);
+    copy(src, &mut validator)?;
+    validator
+        .validate(&keyring)
+        .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
+    Ok(vfy_result)
 }

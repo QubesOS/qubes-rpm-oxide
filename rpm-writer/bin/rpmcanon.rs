@@ -6,7 +6,7 @@ use rpm_crypto::transaction::RpmTransactionSet;
 use rpm_writer::{HeaderBuilder, HeaderEntry};
 use std::ffi::{CStr, CString, OsStr};
 use std::fs::{File, OpenOptions};
-use std::io::{copy, Result, Seek, SeekFrom, Write};
+use std::io::{copy, Read, Result, Seek, SeekFrom, Write};
 use std::os::unix::{
     ffi::OsStrExt,
     fs::OpenOptionsExt,
@@ -16,6 +16,10 @@ use std::path::Path;
 
 fn main() {
     std::process::exit(inner_main())
+}
+
+fn errno() -> std::os::raw::c_int {
+    unsafe { *libc::__errno_location() }
 }
 
 const RPMTAG_SIG_BASE: u32 = 256;
@@ -40,34 +44,19 @@ fn usage(success: bool) -> i32 {
     }
 }
 
-fn process_file(
-    tx: &RpmTransactionSet,
-    src: &std::ffi::OsStr,
-    dst: &std::ffi::OsStr,
-    allow_sha1_sha224: AllowWeakHashes,
-    allow_old_pkgs: bool,
-    preserve_old_signature: bool,
-    token: rpm_crypto::InitToken,
-) -> Result<()> {
-    let mut s = File::open(src)?;
-    // Ignore the lead
-    let _ = rpm_parser::read_lead(&mut s)?;
-    // Read the signature header
-    let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
-    let rpm_parser::VerifyResult {
-        main_header,
-        header_payload_sig,
-        header_sig,
-        main_header_bytes,
-        main_header_hash,
-    } = rpm_parser::verify_package(
-        &mut s,
-        &mut sig_header,
-        &tx.keyring(),
-        allow_old_pkgs,
-        preserve_old_signature,
-        token,
-    )?;
+fn emit_header(
+    &rpm_parser::VerifyResult {
+        ref main_header,
+        ref header_payload_sig,
+        ref header_sig,
+        ref main_header_bytes,
+        ref main_header_hash,
+    }: &rpm_parser::VerifyResult,
+    mut dest: Option<&mut dyn std::io::Write>,
+    _allow_sha1_sha224: AllowWeakHashes,
+    _token: rpm_crypto::InitToken,
+) -> std::io::Result<()> {
+    let dest = dest.as_mut().expect("we always pass a stream; qed");
     let magic_offset = 96;
     let mut hdr = HeaderBuilder::new(rpm_writer::HeaderKind::Signature);
     hdr.push(
@@ -85,8 +74,32 @@ fn process_file(
     hdr.emit(&mut out_data).expect("writes to a vec never fail");
     let fixup = (out_data.len() + 7 & !7) - out_data.len();
     out_data.extend_from_slice(&[0u8; 7][..fixup]);
+    eprintln!("Output data length: {}", out_data.len());
     #[cfg(debug_assertions)]
-    rpm_parser::load_signature(&mut &out_data[magic_offset..], allow_sha1_sha224, token).unwrap();
+    rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_sha1_sha224, _token).unwrap();
+    dest.write_all(&out_data)?;
+    dest.write_all(&main_header_bytes)
+}
+
+fn process_file(
+    tx: &RpmTransactionSet,
+    src: &std::ffi::OsStr,
+    dst: &std::ffi::OsStr,
+    allow_sha1_sha224: AllowWeakHashes,
+    allow_old_pkgs: bool,
+    preserve_old_signature: bool,
+    token: rpm_crypto::InitToken,
+) -> Result<()> {
+    let emit_header: &mut dyn FnMut(
+        &rpm_parser::VerifyResult,
+        Option<&mut dyn std::io::Write>,
+    ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_sha1_sha224, token);
+    let mut s = File::open(src)?;
+    // Ignore the lead
+    let _ = rpm_parser::read_lead(&mut s)?;
+    // Read the signature header
+    let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
+    let mut do_rename = true;
     let (parent_dir, mut dest, fname, tmp_path) = {
         let mut options = OpenOptions::new();
         let path = Path::new(dst);
@@ -111,19 +124,22 @@ fn process_file(
         let mut tmp_path: Option<CString> = None;
         unsafe {
             #[cfg(target_os = "linux")]
-            let res = {
+            let mut res = {
                 static PATH: &[u8] = &*b".\0";
                 libc::openat(
                     parent.as_raw_fd(),
                     PATH.as_ptr() as *const libc::c_char,
-                    libc::O_WRONLY | libc::O_CLOEXEC | libc::O_TMPFILE,
+                    libc::O_RDWR | libc::O_CLOEXEC | libc::O_TMPFILE,
                     0o640,
                 )
             };
             #[cfg(not(target_os = "linux"))]
-            let res = {
+            let mut res = {
                 extern "C" {
-                    fn getentropy(ptr: *const libc::c_void, size: libc::size_t) -> libc::c_int;
+                    fn getentropy(
+                        ptr: *const std::os::raw::c_void,
+                        size: std::os::raw::size_t,
+                    ) -> std::os::raw::c_int;
                 }
                 let mut rand: u64 = 0;
                 if getentropy(&mut rand as *mut u64 as *mut _, std::mem::size_of::<u64>()) != 0 {
@@ -134,14 +150,25 @@ fn process_file(
                 let mut res = libc::openat(
                     parent.as_raw_fd(),
                     s.as_ptr() as *const libc::c_char,
-                    libc::O_WRONLY | libc::O_CLOEXEC | libc::O_EXCL | libc::O_CREAT,
+                    libc::O_RDWR | libc::O_CLOEXEC | libc::O_EXCL | libc::O_CREAT,
                     0640,
                 );
                 res
             };
             if res < 0 {
-                let s = std::io::Error::last_os_error();
-                return Err(s);
+                if errno() == libc::ENOTSUP || errno() == libc::EPERM {
+                    let ptr = CString::new(fname.as_bytes()).expect("NUL in command line banned");
+                    res = libc::openat(
+                        parent.as_raw_fd(),
+                        ptr.as_ptr() as *const std::os::raw::c_char,
+                        libc::O_RDWR | libc::O_CLOEXEC,
+                    );
+                    do_rename = false;
+                }
+                if res < 0 {
+                    let s = std::io::Error::last_os_error();
+                    return Err(s);
+                }
             }
             (
                 parent,
@@ -151,16 +178,44 @@ fn process_file(
             )
         }
     };
-    dest.write_all(&out_data)?;
-    dest.write_all(&main_header_bytes)?;
-    s.seek(SeekFrom::Start(
-        (96 + 16
-            + 16 * sig_header.header.index.len()
-            + ((7 + sig_header.header.data.len()) & !7)
-            + main_header_bytes.len()) as _,
-    ))?;
-    copy(&mut s, &mut dest)?;
-    if if cfg!(target_os = "linux") {
+    let rpm_parser::VerifyResult {
+        main_header,
+        header_payload_sig: _,
+        header_sig: _,
+        main_header_bytes: _,
+        main_header_hash: _,
+    } = rpm_parser::verify_package(
+        &mut s,
+        &mut sig_header,
+        &tx.keyring(),
+        allow_old_pkgs,
+        preserve_old_signature,
+        token,
+        Some(emit_header),
+        Some(&mut dest),
+    )
+    .map_err(|e| {
+        if cfg!(not(target_os = "linux")) {
+            unsafe {
+                let _ = libc::unlinkat(
+                    parent_dir.as_raw_fd(),
+                    tmp_path.as_ref().unwrap().as_ptr(),
+                    0,
+                );
+            }
+        };
+        e
+    })?;
+    dest.flush()?;
+    if false {
+        dest.seek(SeekFrom::Start(0))?;
+        let mut buf = [0u8; 96];
+        dest.read(&mut buf[..])?;
+        assert_eq!(buf, main_header.lead());
+    }
+    if !do_rename {
+        Ok(())
+    } else if if cfg!(target_os = "linux") {
         let proc_dir = format!("/proc/self/fd/{}\0", dest.as_raw_fd());
         let c = CString::new(fname.as_bytes()).expect("NUL forbidden");
         unsafe {
@@ -172,7 +227,7 @@ fn process_file(
                     c.as_ptr() as *const _,
                     libc::AT_SYMLINK_FOLLOW,
                 );
-                if i != -1 || *libc::__errno_location() != libc::EEXIST {
+                if i != -1 || errno() != libc::EEXIST {
                     break i;
                 }
                 if libc::unlinkat(parent_dir.as_raw_fd(), c.as_ptr() as *const _, 0) != 0 {
@@ -191,10 +246,10 @@ fn process_file(
         }
     } < 0
     {
-        return Err(std::io::Error::last_os_error());
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
     }
-
-    Ok(())
 }
 
 fn inner_main() -> i32 {
