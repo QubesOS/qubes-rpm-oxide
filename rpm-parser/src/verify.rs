@@ -183,6 +183,7 @@ pub fn verify_package(
     };
 
     let main_header_bytes = {
+        // Add 1 for the header prelude
         let mut main_header_bytes: Vec<u8> =
             vec![0u8; (16 * (index_length + 1) + data_length).try_into().unwrap()];
         main_header_bytes[..16].copy_from_slice(&prelude);
