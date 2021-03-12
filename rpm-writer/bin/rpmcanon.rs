@@ -155,13 +155,14 @@ fn process_file(
                 );
                 res
             };
+            let fname = fname.as_bytes();
+            let c_fname = CString::new(fname).expect("NUL in command line banned");
             if res < 0 {
                 // Special case for /dev/null
                 if (errno() == libc::ENOTSUP || errno() == libc::EPERM) && fname == b"/dev/null" {
-                    let ptr = CString::new(fname.as_bytes()).expect("NUL in command line banned");
                     res = libc::openat(
                         parent.as_raw_fd(),
-                        ptr.as_ptr() as *const std::os::raw::c_char,
+                        c_fname.as_ptr() as *const std::os::raw::c_char,
                         libc::O_RDWR | libc::O_CLOEXEC,
                     );
                     do_rename = false;
@@ -171,12 +172,7 @@ fn process_file(
                     return Err(s);
                 }
             }
-            (
-                parent,
-                File::from_raw_fd(res),
-                CString::new(fname.as_bytes()).expect("NUL in command line banned"),
-                tmp_path,
-            )
+            (parent, File::from_raw_fd(res), c_fname, tmp_path)
         }
     };
     let rpm_parser::VerifyResult {
