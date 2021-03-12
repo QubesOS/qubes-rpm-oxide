@@ -6,7 +6,7 @@ use rpm_crypto::transaction::RpmTransactionSet;
 use rpm_writer::{HeaderBuilder, HeaderEntry};
 use std::ffi::{CStr, CString, OsStr};
 use std::fs::{File, OpenOptions};
-use std::io::{copy, Read, Result, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::os::unix::{
     ffi::OsStrExt,
     fs::OpenOptionsExt,
