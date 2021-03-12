@@ -158,14 +158,17 @@ fn process_file(
             let fname = fname.as_bytes();
             let c_fname = CString::new(fname).expect("NUL in command line banned");
             if res < 0 {
-                // Special case for /dev/null
-                if (errno() == libc::ENOTSUP || errno() == libc::EPERM) && fname == b"/dev/null" {
-                    res = libc::openat(
-                        parent.as_raw_fd(),
-                        c_fname.as_ptr() as *const std::os::raw::c_char,
-                        libc::O_RDWR | libc::O_CLOEXEC,
-                    );
-                    do_rename = false;
+                match errno() {
+                    // Special case for /dev/null
+                    libc::ENOTSUP | libc::EPERM | libc::EACCES if fname == b"/dev/null" => {
+                        res = libc::openat(
+                            parent.as_raw_fd(),
+                            c_fname.as_ptr() as *const std::os::raw::c_char,
+                            libc::O_RDWR | libc::O_CLOEXEC,
+                        );
+                        do_rename = false;
+                    }
+                    _ => {}
                 }
                 if res < 0 {
                     let s = std::io::Error::last_os_error();
