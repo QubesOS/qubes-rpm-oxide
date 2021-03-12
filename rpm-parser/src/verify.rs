@@ -5,49 +5,120 @@ use rpm_crypto::{transaction::RpmKeyring, DigestCtx, InitToken, Signature};
 use std::convert::TryInto;
 use std::io::{copy, Error, ErrorKind, Read, Result, Write};
 
-struct Validator<'a> {
-    sig: Option<Signature>,
-    dgst: Option<(DigestCtx, Vec<u8>)>,
-    output: Option<&'a mut dyn std::io::Write>,
-}
-
-impl<'a> std::io::Write for Validator<'a> {
-    fn write(&mut self, data: &[u8]) -> Result<usize> {
-        let len = match self.output {
-            None => data.len(),
-            Some(ref mut output) => output.write(data)?,
-        };
-        self.sig.as_mut().map(|s| s.update(&data[..len]));
-        self.dgst.as_mut().map(|(c, _)| c.update(&data[..len]));
-        Ok(len)
+mod validator {
+    use super::*;
+    /// Something that can be cryptographically verified
+    enum Verifyable {
+        /// An untrusted digest
+        UntrustedDigest(DigestCtx, Vec<u8>),
+        /// A signature
+        Signature(Signature),
+        /// A trusted digest
+        TrustedDigest(DigestCtx, Vec<u8>),
     }
-    fn flush(&mut self) -> Result<()> {
-        match self.output {
-            None => Ok(()),
-            Some(ref mut s) => s.flush(),
-        }
-    }
-}
 
-impl<'a> Validator<'a> {
-    fn validate(self, keyring: &RpmKeyring) -> std::result::Result<(), ()> {
-        let Self {
-            sig,
-            dgst,
-            output: _,
-        } = self;
-        let mut retval = Err(());
-        if let Some(s) = sig {
-            let () = keyring.validate_sig(s).map_err(drop)?;
-            retval = Ok(());
-        }
-        if let Some((ctx, digest)) = dgst {
-            if ctx.finalize(true) != digest {
-                return Err(());
+    impl Verifyable {
+        fn update(&mut self, data: &[u8]) {
+            match self {
+                Self::UntrustedDigest(dgst, _) | Self::TrustedDigest(dgst, _) => dgst.update(data),
+                Self::Signature(sig) => sig.update(data),
             }
-            retval = Ok(())
         }
-        retval
+
+        fn trusted(&self) -> bool {
+            match self {
+                Self::Signature(_) | Self::TrustedDigest(_, _) => true,
+                Self::UntrustedDigest(_, _) => false,
+            }
+        }
+    }
+
+    pub(super) struct Validator<'a> {
+        objects: Vec<Verifyable>,
+        output: Option<&'a mut dyn std::io::Write>,
+    }
+
+    impl<'a> std::io::Write for Validator<'a> {
+        /// Update the digests and signatures within with the provided data.
+        fn write(&mut self, data: &[u8]) -> Result<usize> {
+            let len = match self.output {
+                None => data.len(),
+                Some(ref mut output) => output.write(data)?,
+            };
+            for i in &mut self.objects {
+                i.update(&data[..len])
+            }
+            Ok(len)
+        }
+        fn flush(&mut self) -> Result<()> {
+            match self.output {
+                None => Ok(()),
+                Some(ref mut s) => s.flush(),
+            }
+        }
+    }
+
+    impl<'a> Validator<'a> {
+        /// Creates a [`Validator`]
+        pub(super) fn new(output: Option<&'a mut dyn std::io::Write>) -> Self {
+            Self {
+                objects: vec![],
+                output,
+            }
+        }
+        /// Sets the [`std::io::Write`] that this [`Validator`] will write bytes to.  The bytes are
+        /// untrusted at this point.
+        ///
+        /// Returns the old writer.
+        pub(super) fn set_output(
+            &mut self,
+            output: Option<&'a mut dyn std::io::Write>,
+        ) -> Option<&'a mut dyn std::io::Write> {
+            std::mem::replace(&mut self.output, output)
+        }
+        /// Add an untrusted digest.  An incorrect untrusted digest will result in verification
+        /// failure, but a correct untrusted digest is not sufficient.
+        pub(super) fn add_untrusted_digest(&mut self, dgst: DigestCtx, data: Vec<u8>) -> &mut Self {
+            self.objects.push(Verifyable::UntrustedDigest(dgst, data));
+            self
+        }
+        /// Add a signature.  Signatures are always considered trusted.
+        pub(super) fn add_signature(&mut self, sig: Signature) -> &mut Self {
+            self.objects.push(Verifyable::Signature(sig));
+            self
+        }
+        /// Add a trusted digest.  Trusted digests are considered to be as strong as a signature.
+        /// Therefore, the data being verified must come from a trusted source.
+        ///
+        /// For example, it is safe to use a digest that comes from a header signed with a trusted
+        /// signature.
+        pub(super) fn add_trusted_digest(&mut self, dgst: DigestCtx, data: Vec<u8>) -> &mut Self {
+            self.objects.push(Verifyable::TrustedDigest(dgst, data));
+            self
+        }
+        /// Consume [`self`] and validate the signatures and/or digests contained theirin.
+        ///
+        /// This will return [`Ok`] only if both of the following conditions are met:
+        ///
+        /// - All digests and signatures must validate correctly.
+        /// - [`self`] must contain either a signature or a trusted digest.
+        pub(super) fn validate(self, keyring: &RpmKeyring) -> std::result::Result<(), ()> {
+            let mut trusted = false;
+            let mut no_bad_found = true;
+            for i in self.objects.into_iter() {
+                trusted |= i.trusted();
+                no_bad_found &= match i {
+                    Verifyable::TrustedDigest(ctx, digest)
+                    | Verifyable::UntrustedDigest(ctx, digest) => ctx.finalize(true) == digest,
+                    Verifyable::Signature(sig) => keyring.validate_sig(sig).is_ok(),
+                };
+            }
+            if trusted && no_bad_found {
+                Ok(())
+            } else {
+                Err(())
+            }
+        }
     }
 }
 
@@ -91,21 +162,11 @@ pub fn verify_package(
     >,
     output: Option<&mut dyn std::io::Write>,
 ) -> std::io::Result<VerifyResult> {
-    assert!(Validator {
-        sig: None,
-        dgst: None,
-        output: None,
-    }
-    .validate(keyring)
-    .is_err());
-    let mut validator: Validator = Validator {
-        sig: None,
-        dgst: None,
-        output,
-    };
+    use validator::Validator;
+    let mut validator: Validator = Validator::new(None);
     let mut header_payload_sig = None;
     if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {
-        validator.sig = Some(sig);
+        validator.add_signature(sig);
         header_payload_sig = Some(s_bytes);
     } else if preserve_old_sig {
         return Err(Error::new(
@@ -134,13 +195,10 @@ pub fn verify_package(
         main_header_hash.update(&main_header_bytes);
         main_header_hash.finalize(true)
     };
-    let out = validator.output.take();
-    assert!(matches!(validator.output, None));
     assert_eq!(
         validator.write(&main_header_bytes).unwrap(),
         main_header_bytes.len()
     );
-    validator.output = out;
     let (mut signature, header_sig) = sig_header
         .header_signature
         .take()
@@ -157,16 +215,19 @@ pub fn verify_package(
             },
         )
     })?;
+    validator.set_output(output);
     let main_header = crate::load_immutable(&mut &*main_header_bytes, token)?;
     // This header is signed, so its payload digest is trusted
-    validator.dgst = match main_header.payload_digest() {
+    match main_header.payload_digest() {
         Ok(s) => {
-            if !preserve_old_sig {
-                header_payload_sig = None
+            if preserve_old_sig {
+                validator.add_untrusted_digest(s.0, s.1);
+            } else {
+                header_payload_sig = None;
+                validator.add_trusted_digest(s.0, s.1);
             }
-            Some(s)
         }
-        Err(_) if allow_old_pkgs => None,
+        Err(_) if allow_old_pkgs => {}
         Err(e) => return Err(e),
     };
     let vfy_result = VerifyResult {
@@ -177,10 +238,12 @@ pub fn verify_package(
         main_header_hash,
     };
     if let Some(ref mut cb) = cb {
-        match validator.output.as_mut() {
+        let mut output = validator.set_output(None);
+        match output {
             None => cb(&vfy_result, None)?,
-            Some(output) => cb(&vfy_result, Some(output))?,
+            Some(ref mut o) => cb(&vfy_result, Some(o))?,
         }
+        validator.set_output(output);
     }
     drop(cb);
     copy(src, &mut validator)?;
@@ -188,4 +251,44 @@ pub fn verify_package(
         .validate(&keyring)
         .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
     Ok(vfy_result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rpm_crypto::transaction::RpmTransactionSet;
+    use validator::Validator;
+    const EMPTY_SHA256: &'static [u8] =
+        &*b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\0";
+    #[test]
+    fn empty_validator_bad() {
+        let token = rpm_crypto::init();
+        let tx = RpmTransactionSet::new(token);
+        let keyring = tx.keyring();
+        assert!(Validator::new(None).validate(&keyring).is_err());
+        let sha256 = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
+            .expect("SHA-256 is supported");
+
+        // An untrusted digest is not sufficient
+        let mut v = Validator::new(None);
+        v.add_untrusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.validate(&keyring).unwrap_err();
+
+        // A trusted digest is sufficient
+        v = Validator::new(None);
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.validate(&keyring).unwrap();
+
+        // Bad trusted digest
+        v = Validator::new(None);
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        assert!(matches!(v.write(b"a"), Ok(1)));
+        v.validate(&keyring).unwrap_err();
+
+        // Bad untrusted digest
+        v = Validator::new(None);
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.add_untrusted_digest(sha256.clone(), vec![]);
+        v.validate(&keyring).unwrap_err();
+    }
 }
