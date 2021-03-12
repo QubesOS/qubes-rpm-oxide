@@ -135,7 +135,7 @@ pub fn load_immutable(r: &mut dyn Read, token: InitToken) -> Result<ImmutableHea
             5092 | 5097 => {
                 // payload digest
                 fail_if!(tag_data.count() != 1, "more than one payload digest?");
-                check_hex(&body[..body.len() - 1])?;
+                check_hex(body)?;
                 if tag == 5092 {
                     assert!(payload_digest.is_none(), "duplicate tags rejected earlier");
                     payload_digest = Some(body.to_owned())

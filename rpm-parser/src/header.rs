@@ -12,11 +12,13 @@ pub use immutable::{load_immutable, ImmutableHeader};
 pub use signature::{load_signature, SignatureHeader};
 use std::io::Result;
 
-/// Check that a `Reader` is a properly formatted hex string.  Assert that
-/// it is NUL-terminated.
+/// Check that a `Reader` is a properly formatted, NUL-terminated hex string.
 fn check_hex(untrusted_body: &[u8]) -> Result<()> {
-    fail_if!(untrusted_body.len() & 1 != 0, "hex length not even");
-    for &i in untrusted_body {
+    let len = untrusted_body.len();
+    fail_if!(len & 1 == 0, "hex length not even");
+    let len = len - 1;
+    fail_if!(untrusted_body[len] != b'\0', "missing NUL terminator");
+    for &i in &untrusted_body[..len] {
         match i {
             b'a'..=b'f' | b'0'..=b'9' => (),
             _ => bad_data!("bad hex"),

@@ -99,7 +99,7 @@ pub fn load_signature(
             }),
             Flags::HeaderDigest | Flags::PayloadDigest => {
                 // our lengths include the terminating NUL
-                check_hex(&body[..body.len() - 1])
+                check_hex(body)
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
                 let sig = match Signature::parse(body, 0, allow_sha1_sha224, token) {
