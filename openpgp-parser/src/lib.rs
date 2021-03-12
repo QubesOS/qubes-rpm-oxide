@@ -1,24 +1,8 @@
-//! A library for parsing and serializing RPM packages.  It does not rely on the
-//! RPM C library, and contains no unsafe code.
+//! A library for parsing OpenPGP packets
 //!
-//! All interfaces of `rpm_syntax` are safe for use on untrusted packages.
-//! Since `rpm_syntax` does not use the RPM C library, it is not limited to
-//! \*nix-like systems.
-//!
-//! This library does not support building or installing RPM packages.  These
-//! features can be found in the `rpm` crate, which uses the system RPM library.
-//!
-//! # Features
-//!
-//! `rpm_syntax` has several Cargo features that can be turned on.  All of these
-//! are off by default.
-//!
-//! - `serialize`: Enables serializing RPM packages, as well as parsing them.
-//!   This currently imples `alloc`.
-//! - `alloc`: Features that allocate memory.  This is currently an alias for
-//!   `serialize`, but this may change in the future.
-//! - `std`: Features that require the standard library, such as I/O.  This
-//!   implies `alloc`.
+//! `openpgp-parser` is a Rust library for validating OpenPGP packets.  It has
+//! no cryptography of its own, and is instead designed to validate packets that
+//! will be passed to a different OpenPGP implementation.
 
 #![forbid(missing_docs, unsafe_code, deprecated)]
 #![deny(warnings)]
