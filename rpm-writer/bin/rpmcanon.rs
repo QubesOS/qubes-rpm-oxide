@@ -207,12 +207,6 @@ fn process_file(
         e
     })?;
     dest.flush()?;
-    if false {
-        dest.seek(SeekFrom::Start(0))?;
-        let mut buf = [0u8; 96];
-        dest.read(&mut buf[..])?;
-        assert_eq!(buf, main_header.lead());
-    }
     if !do_rename {
         Ok(())
     } else if if cfg!(target_os = "linux") {
