@@ -35,10 +35,10 @@ mod validator {
 
     pub(super) struct Validator<'a> {
         objects: Vec<Verifyable>,
-        output: Option<&'a mut dyn std::io::Write>,
+        output: Option<&'a mut dyn Write>,
     }
 
-    impl<'a> std::io::Write for Validator<'a> {
+    impl<'a> Write for Validator<'a> {
         /// Update the digests and signatures within with the provided data.
         fn write(&mut self, data: &[u8]) -> Result<usize> {
             let len = match self.output {
@@ -60,7 +60,7 @@ mod validator {
 
     impl<'a> Validator<'a> {
         /// Creates a [`Validator`]
-        pub(super) fn new(output: Option<&'a mut dyn std::io::Write>) -> Self {
+        pub(super) fn new(output: Option<&'a mut dyn Write>) -> Self {
             Self {
                 objects: vec![],
                 output,
@@ -73,8 +73,8 @@ mod validator {
         /// Returns the old writer.
         pub(super) fn set_output(
             &mut self,
-            output: Option<&'a mut dyn std::io::Write>,
-        ) -> Option<&'a mut dyn std::io::Write> {
+            output: Option<&'a mut dyn Write>,
+        ) -> Option<&'a mut dyn Write> {
             std::mem::replace(&mut self.output, output)
         }
 
@@ -156,16 +156,14 @@ pub struct VerifyResult {
 /// - `output`: Output stream that receives the (not yet validated!) bytes, for
 ///   streaming support.
 pub fn verify_package(
-    src: &mut std::fs::File,
+    src: &mut dyn Read,
     sig_header: &mut SignatureHeader,
     keyring: &RpmKeyring,
     allow_old_pkgs: bool,
     preserve_old_sig: bool,
     token: InitToken,
-    mut cb: Option<
-        &mut dyn FnMut(&VerifyResult, Option<&mut dyn std::io::Write>) -> std::io::Result<()>,
-    >,
-    output: Option<&mut dyn std::io::Write>,
+    mut cb: Option<&mut dyn FnMut(&VerifyResult, Option<&mut dyn Write>) -> Result<()>>,
+    output: Option<&mut dyn Write>,
 ) -> std::io::Result<VerifyResult> {
     use validator::Validator;
     let mut validator: Validator = Validator::new(None);
