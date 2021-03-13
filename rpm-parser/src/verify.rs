@@ -66,6 +66,7 @@ mod validator {
                 output,
             }
         }
+
         /// Sets the [`std::io::Write`] that this [`Validator`] will write bytes to.  The bytes are
         /// untrusted at this point.
         ///
@@ -76,17 +77,20 @@ mod validator {
         ) -> Option<&'a mut dyn std::io::Write> {
             std::mem::replace(&mut self.output, output)
         }
+
         /// Add an untrusted digest.  An incorrect untrusted digest will result in verification
         /// failure, but a correct untrusted digest is not sufficient.
         pub(super) fn add_untrusted_digest(&mut self, dgst: DigestCtx, data: Vec<u8>) -> &mut Self {
             self.objects.push(Verifyable::UntrustedDigest(dgst, data));
             self
         }
+
         /// Add a signature.  Signatures are always considered trusted.
         pub(super) fn add_signature(&mut self, sig: Signature) -> &mut Self {
             self.objects.push(Verifyable::Signature(sig));
             self
         }
+
         /// Add a trusted digest.  Trusted digests are considered to be as strong as a signature.
         /// Therefore, the data being verified must come from a trusted source.
         ///
@@ -96,6 +100,7 @@ mod validator {
             self.objects.push(Verifyable::TrustedDigest(dgst, data));
             self
         }
+
         /// Consume [`self`] and validate the signatures and/or digests contained theirin.
         ///
         /// This will return [`Ok`] only if both of the following conditions are met:
@@ -256,40 +261,104 @@ pub fn verify_package(
 
 #[cfg(test)]
 mod tests {
+    use rpm_crypto::{
+        transaction::{RpmKeyring, RpmTransactionSet},
+        InitToken,
+    };
+    thread_local! {
+        static KEYRING: RpmKeyring = {
+            let tx = TOKEN.with(|&s|RpmTransactionSet::new(s));
+            tx.keyring()
+        };
+        static TOKEN: InitToken = rpm_crypto::init();
+        static SHA256: DigestCtx = TOKEN.with(|&t|DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No,t))
+            .expect("SHA-256 is supported");
+    }
     use super::*;
-    use rpm_crypto::transaction::RpmTransactionSet;
     use validator::Validator;
     const EMPTY_SHA256: &'static [u8] =
         &*b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\0";
+    const A_SHA256: &'static [u8] =
+        &*b"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb\0";
+    fn globals() -> (RpmKeyring, InitToken, DigestCtx) {
+        KEYRING.with(|keyring| {
+            TOKEN.with(|token| {
+                SHA256.with(|sha256| (keyring.clone(), token.clone(), sha256.clone()))
+            })
+        })
+    }
     #[test]
     fn empty_validator_bad() {
-        let token = rpm_crypto::init();
-        let tx = RpmTransactionSet::new(token);
-        let keyring = tx.keyring();
+        let (keyring, _, _) = globals();
         assert!(Validator::new(None).validate(&keyring).is_err());
-        let sha256 = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
-            .expect("SHA-256 is supported");
+    }
 
-        // An untrusted digest is not sufficient
+    #[test]
+    fn untrusted_digest_not_sufficient() {
+        let (keyring, _, sha256) = globals();
         let mut v = Validator::new(None);
         v.add_untrusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
         v.validate(&keyring).unwrap_err();
+    }
 
-        // A trusted digest is sufficient
-        v = Validator::new(None);
+    #[test]
+    fn trusted_digest_sufficient() {
+        let (keyring, _, sha256) = globals();
+        let mut v = Validator::new(None);
         v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
         v.validate(&keyring).unwrap();
+    }
 
-        // Bad trusted digest
-        v = Validator::new(None);
+    #[test]
+    fn bad_trusted_digest() {
+        let (keyring, _, sha256) = globals();
+        let mut v = Validator::new(None);
         v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
         assert!(matches!(v.write(b"a"), Ok(1)));
         v.validate(&keyring).unwrap_err();
+    }
 
-        // Bad untrusted digest
-        v = Validator::new(None);
+    #[test]
+    fn bad_untrusted_digest() {
+        let (keyring, _, sha256) = globals();
+        let mut v = Validator::new(None);
         v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
         v.add_untrusted_digest(sha256.clone(), vec![]);
         v.validate(&keyring).unwrap_err();
+    }
+
+    #[test]
+    fn mixed_digests() {
+        let (keyring, _, sha256) = globals();
+
+        // Mixture of digests
+        let mut v = Validator::new(None);
+        v.add_untrusted_digest(sha256.clone(), A_SHA256.to_owned());
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.validate(&keyring).unwrap_err();
+    }
+
+    #[test]
+    fn mixed_digests_update() {
+        let (keyring, _, sha256) = globals();
+        // Mixture of digests
+        let mut v = Validator::new(None);
+        v.add_untrusted_digest(sha256.clone(), A_SHA256.to_owned());
+        v.write(b"a").unwrap();
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.validate(&keyring).unwrap();
+    }
+
+    #[test]
+    fn short_writes() {
+        let (keyring, _, sha256) = globals();
+        // Short writes
+        let mut buf = [1];
+        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+        let mut v = Validator::new(Some(&mut cursor));
+        v.add_untrusted_digest(sha256.clone(), A_SHA256.to_owned());
+        assert_eq!(v.write(b"ab").unwrap(), 1);
+        v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
+        v.validate(&keyring).unwrap();
     }
 }
