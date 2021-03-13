@@ -48,11 +48,11 @@ impl Signature {
     pub fn parse(
         untrusted_buffer: &[u8],
         time: u32,
-        allow_sha1_sha224: AllowWeakHashes,
+        allow_weak_hashes: AllowWeakHashes,
         token: InitToken,
     ) -> Result<Self, Error> {
-        let sig = RawSignature::parse(untrusted_buffer, time, allow_sha1_sha224, token)?;
-        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_sha1_sha224, token)
+        let sig = RawSignature::parse(untrusted_buffer, time, allow_weak_hashes, token)?;
+        let ctx = DigestCtx::init(sig.hash_algorithm(), allow_weak_hashes, token)
             .expect("Digest algorithm already validated");
         Ok(Self { sig, ctx })
     }

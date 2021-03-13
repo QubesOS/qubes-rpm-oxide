@@ -24,11 +24,11 @@ impl RPMPackage {
     /// Load a package from `r`
     pub fn read(
         r: &mut dyn Read,
-        allow_sha1_sha224: AllowWeakHashes,
+        allow_weak_hashes: AllowWeakHashes,
         token: InitToken,
     ) -> Result<Self> {
         let lead = read_lead(r)?;
-        let signature = load_signature(r, allow_sha1_sha224, token)?;
+        let signature = load_signature(r, allow_weak_hashes, token)?;
         let immutable = load_immutable(r, token)?;
         let (osnum, archnum) = (
             os_to_osnum(immutable.os.as_bytes()).unwrap_or(255),

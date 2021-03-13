@@ -10,12 +10,12 @@ impl Signature {
     pub fn parse(
         untrusted_buffer: &[u8],
         time: u32,
-        allow_sha1_sha224: AllowWeakHashes,
+        allow_weak_hashes: AllowWeakHashes,
         _: InitToken,
     ) -> Result<Self, Error> {
         super::init();
         // Check that the signature is valid
-        let sig_info = signature::parse(untrusted_buffer, time, allow_sha1_sha224)?;
+        let sig_info = signature::parse(untrusted_buffer, time, allow_weak_hashes)?;
         // We can now pass the buffer to RPM, since it is a valid signature
         let slice = untrusted_buffer;
         let mut params = Signature(std::ptr::null_mut());

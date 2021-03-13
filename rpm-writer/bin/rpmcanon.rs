@@ -32,7 +32,7 @@ fn usage(success: bool) -> i32 {
                                  Options:\n\n\
                                  --help print this message\n\
                                  --preserve-old-signature Preserve and require the RPMv3 (header+payload) signature\n\
-                                 --allow-sha1-sha224 allow packages signed with SHA-1 or SHA-224\n\
+                                 --allow-weak-hashes allow packages signed with SHA-1 or SHA-224\n\
                                  --allow-old-pkgs allow packages that don’t have a payload digest in the main header\n\
                                  --directory copy packages in SOURCE to DESTINATION; both directories must exist";
     if success {
@@ -53,7 +53,7 @@ fn emit_header(
         ref main_header_hash,
     }: &rpm_parser::VerifyResult,
     mut dest: Option<&mut dyn std::io::Write>,
-    _allow_sha1_sha224: AllowWeakHashes,
+    _allow_weak_hashes: AllowWeakHashes,
     _token: rpm_crypto::InitToken,
 ) -> std::io::Result<()> {
     let dest = dest.as_mut().expect("we always pass a stream; qed");
@@ -76,7 +76,7 @@ fn emit_header(
     out_data.extend_from_slice(&[0u8; 7][..fixup]);
     eprintln!("Output data length: {}", out_data.len());
     #[cfg(debug_assertions)]
-    rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_sha1_sha224, _token).unwrap();
+    rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_weak_hashes, _token).unwrap();
     dest.write_all(&out_data)?;
     dest.write_all(&main_header_bytes)
 }
@@ -85,7 +85,7 @@ fn process_file(
     tx: &RpmTransactionSet,
     src: &std::ffi::OsStr,
     dst: &std::ffi::OsStr,
-    allow_sha1_sha224: AllowWeakHashes,
+    allow_weak_hashes: AllowWeakHashes,
     allow_old_pkgs: bool,
     preserve_old_signature: bool,
     token: rpm_crypto::InitToken,
@@ -93,12 +93,12 @@ fn process_file(
     let emit_header: &mut dyn FnMut(
         &rpm_parser::VerifyResult,
         Option<&mut dyn std::io::Write>,
-    ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_sha1_sha224, token);
+    ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_weak_hashes, token);
     let mut s = File::open(src)?;
     // Ignore the lead
     let _ = rpm_parser::read_lead(&mut s)?;
     // Read the signature header
-    let mut sig_header = rpm_parser::load_signature(&mut s, allow_sha1_sha224, token)?;
+    let mut sig_header = rpm_parser::load_signature(&mut s, allow_weak_hashes, token)?;
     let mut do_rename = true;
     let (parent_dir, mut dest, fname, tmp_path) = {
         let mut options = OpenOptions::new();
@@ -255,7 +255,7 @@ fn process_file(
 fn inner_main() -> i32 {
     let token = rpm_crypto::init();
     let mut args = std::env::args_os().into_iter();
-    let mut allow_sha1_sha224 = AllowWeakHashes::No;
+    let mut allow_weak_hashes = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
     let mut directory = false;
     let mut preserve_old_signature = false;
@@ -265,7 +265,7 @@ fn inner_main() -> i32 {
     };
     for i in &mut args {
         match i.as_bytes() {
-            b"--allow-sha1-sha224" => allow_sha1_sha224 = AllowWeakHashes::Yes,
+            b"--allow-weak-hashes" => allow_weak_hashes = AllowWeakHashes::Yes,
             b"--help" => return usage(true),
             b"--directory" => directory = true,
             b"--allow-old-pkgs" => allow_old_pkgs = true,
@@ -287,7 +287,7 @@ fn inner_main() -> i32 {
         &tx,
         &src,
         &dst,
-        allow_sha1_sha224,
+        allow_weak_hashes,
         allow_old_pkgs,
         preserve_old_signature,
         token,

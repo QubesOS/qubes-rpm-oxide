@@ -113,15 +113,15 @@ pub fn pkey_alg_mpis(alg: u8, sig_version: u8) -> Result<u8, Error> {
 }
 
 /// Checks that a hash algorithm is secure; if it is, returns the length (in bytes) of the hash it
-/// generates.  If `allow_sha1_sha224` is set, also allow SHA1 and SHA224.
-pub fn check_hash_algorithm(hash: i32, allow_sha1_sha224: AllowWeakHashes) -> Result<u16, Error> {
+/// generates.  If `allow_weak_hashes` is set, also allow SHA1 and SHA224.
+pub fn check_hash_algorithm(hash: i32, allow_weak_hashes: AllowWeakHashes) -> Result<u16, Error> {
     match hash {
         // Okay hash algorithms
         OPENPGP_HASH_SHA256 => Ok(32),
         OPENPGP_HASH_SHA384 => Ok(48),
         OPENPGP_HASH_SHA512 => Ok(64),
-        OPENPGP_HASH_SHA224 if allow_sha1_sha224 == AllowWeakHashes::Yes => Ok(28),
-        OPENPGP_HASH_INSECURE_SHA1 if allow_sha1_sha224 == AllowWeakHashes::Yes => Ok(20),
+        OPENPGP_HASH_SHA224 if allow_weak_hashes == AllowWeakHashes::Yes => Ok(28),
+        OPENPGP_HASH_INSECURE_SHA1 if allow_weak_hashes == AllowWeakHashes::Yes => Ok(20),
         // Insecure hash algorithms
         OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
@@ -252,10 +252,10 @@ fn process_subpacket<'a>(
 pub fn parse<'a>(
     data: &'a [u8],
     timestamp: u32,
-    allow_sha1_sha224: AllowWeakHashes,
+    allow_weak_hashes: AllowWeakHashes,
 ) -> Result<SigInfo, Error> {
     Reader::read_all(data, Error::TrailingJunk, |reader| {
-        read_signature(reader, timestamp, allow_sha1_sha224)
+        read_signature(reader, timestamp, allow_weak_hashes)
     })
 }
 
@@ -263,21 +263,21 @@ pub fn parse<'a>(
 pub fn read_signature<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
-    allow_sha1_sha224: AllowWeakHashes,
+    allow_weak_hashes: AllowWeakHashes,
 ) -> Result<SigInfo, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     if packet.tag() != 2 {
         return Err(Error::IllFormedSignature);
     }
     Reader::read_all(packet.contents(), Error::TrailingJunk, |e| {
-        parse_packet_body(e, timestamp, allow_sha1_sha224)
+        parse_packet_body(e, timestamp, allow_weak_hashes)
     })
 }
 
 fn parse_packet_body<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
-    allow_sha1_sha224: AllowWeakHashes,
+    allow_weak_hashes: AllowWeakHashes,
 ) -> Result<SigInfo, Error> {
     let version = reader.byte()?;
     #[cfg(test)]
@@ -344,7 +344,7 @@ fn parse_packet_body<'a>(
         _ => return Err(Error::IllFormedSignature),
     }
     let mpis = pkey_alg_mpis(pkey_alg, version)?;
-    check_hash_algorithm(hash_alg.into(), allow_sha1_sha224)?;
+    check_hash_algorithm(hash_alg.into(), allow_weak_hashes)?;
     // Check the creation time
     let creation_time = match siginfo.creation_time {
         Some(t) => t,

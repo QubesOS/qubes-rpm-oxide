@@ -57,11 +57,11 @@ impl DigestCtx {
     /// Initialize an RPM digest context
     pub fn init(
         algorithm: u8,
-        allow_sha1_sha224: AllowWeakHashes,
+        allow_weak_hashes: AllowWeakHashes,
         _: super::InitToken,
     ) -> Result<DigestCtx, ()> {
         use openpgp_parser::signature::check_hash_algorithm;
-        let len = check_hash_algorithm(algorithm.into(), allow_sha1_sha224).map_err(drop)?;
+        let len = check_hash_algorithm(algorithm.into(), allow_weak_hashes).map_err(drop)?;
         if rpm_hash_len(algorithm.into()) != len.into() {
             return Err(());
         }

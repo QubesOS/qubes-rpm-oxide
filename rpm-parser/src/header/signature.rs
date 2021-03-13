@@ -64,7 +64,7 @@ pub struct SignatureHeader {
 
 pub fn load_signature(
     r: &mut dyn Read,
-    allow_sha1_sha224: AllowWeakHashes,
+    allow_weak_hashes: AllowWeakHashes,
     token: rpm_crypto::InitToken,
 ) -> Result<SignatureHeader> {
     let mut header_signature = None;
@@ -102,7 +102,7 @@ pub fn load_signature(
                 check_hex(body)
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body, 0, allow_sha1_sha224, token) {
+                let sig = match Signature::parse(body, 0, allow_weak_hashes, token) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };
