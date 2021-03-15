@@ -19,12 +19,12 @@ enum Flags {
 macro_rules! stuff {
     ($($(#[doc = $e:expr])+($a:expr,$b:expr,$c:expr,$d:expr$(,)?)),*$(,)?) => {
         [
-            $((($a, $b), $c, $d, concat!($($e),+))),*
+            $(($a, $b, $c, $d, concat!($($e),+))),*
         ]
     }
 }
 
-static RPM_SIG_TAGS: &'static [((u32, TagType), Option<usize>, Flags, &'static str)] = &stuff![
+static RPM_SIG_TAGS: &'static [(u32, TagType, Option<usize>, Flags, &'static str)] = &stuff![
     /// Header signature
     (256 + 11, TagType::Bin, None, Flags::HeaderSig),
     /// Header signature
@@ -78,11 +78,14 @@ pub fn load_signature(
     }
     let mut cb = |ty: TagType, tag_data: &TagData, body: &[u8]| {
         let tag = tag_data.tag();
-        let (_, size, flags, _) = match RPM_SIG_TAGS.binary_search_by_key(&(tag, ty), |x| x.0) {
-            Ok(e) => RPM_SIG_TAGS[e],
-            Err(_) => bad_data!("bogus tag type {:?} for tag {}", ty, tag),
-        };
-        if let Some(size) = size {
+        let (_, expected_ty, size, flags, _) =
+            match RPM_SIG_TAGS.binary_search_by_key(&tag, |x| x.0) {
+                Ok(e) => RPM_SIG_TAGS[e],
+                Err(_) => return Ok(()),
+            };
+        if ty != expected_ty {
+            bad_data!("bogus tag type {:?} for tag {}", ty, tag)
+        } else if let Some(size) = size {
             if size != body.len() {
                 bad_data!(
                     "BAD: tag size {} for tag {} and type {:?}",
