@@ -6,7 +6,7 @@ use rpm_crypto::transaction::RpmTransactionSet;
 use rpm_writer::{HeaderBuilder, HeaderEntry};
 use std::ffi::{CStr, CString, OsStr};
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{Result, Write};
 use std::os::unix::{
     ffi::OsStrExt,
     fs::OpenOptionsExt,
@@ -178,13 +178,7 @@ fn process_file(
             (parent, File::from_raw_fd(res), c_fname, tmp_path)
         }
     };
-    let rpm_parser::VerifyResult {
-        main_header,
-        header_payload_sig: _,
-        header_sig: _,
-        main_header_bytes: _,
-        main_header_hash: _,
-    } = rpm_parser::verify_package(
+    let rpm_parser::VerifyResult { .. } = rpm_parser::verify_package(
         &mut s,
         &mut sig_header,
         &tx.keyring(),

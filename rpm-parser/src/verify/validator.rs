@@ -1,5 +1,5 @@
-use std::io::{Write, Result};
 use rpm_crypto::{transaction::RpmKeyring, DigestCtx, Signature};
+use std::io::{Result, Write};
 
 /// Something that can be cryptographically verified
 enum Verifyable {
@@ -119,4 +119,3 @@ impl<'a> Validator<'a> {
         }
     }
 }
-
