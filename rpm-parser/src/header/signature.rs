@@ -142,7 +142,19 @@ pub fn load_signature(
                 Ok(())
             }
             Flags::HeaderSig | Flags::HeaderPayloadSig => {
-                let sig = match Signature::parse(body, 0, allow_weak_hashes, token) {
+                use std::time::SystemTime;
+                let time = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                    Ok(d) => {
+                        let secs = d.as_secs();
+                        if secs > 0 && secs < u32::MAX.into() {
+                            secs as u32
+                        } else {
+                            bad_data!("Bad secs since the epoch {:?} (delta is {}) - check your system clock", d, secs)
+                        }
+                    }
+                    Err(e) => bad_data!("Your system clock is really wrong: {}", e),
+                };
+                let sig = match Signature::parse(body, time, allow_weak_hashes, token) {
                     Ok(e) => e,
                     Err(e) => bad_data!("bad OpenPGP signature: {:?}", e),
                 };

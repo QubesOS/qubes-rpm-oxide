@@ -218,7 +218,7 @@ fn process_subpacket<'a>(
         }
         SUBPACKET_CREATION_TIME => {
             let timestamp = reader.be_u32()?;
-            if time != 0 && timestamp < time {
+            if time != 0 && timestamp > time {
                 Err(Error::SignatureNotValidYet)
             } else if std::mem::replace(&mut id.creation_time, Some(timestamp)).is_some() {
                 Err(Error::IllFormedSignature)
