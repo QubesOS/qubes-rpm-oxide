@@ -26,6 +26,7 @@ const RPMTAG_SIG_BASE: u32 = 256;
 const RPMSIGTAG_SHA256HEADER: u32 = RPMTAG_SIG_BASE + 17;
 const RPMSIGTAG_RSAHEADER: u32 = RPMTAG_SIG_BASE + 12;
 const RPMSIGTAG_PGP: u32 = 1002;
+const RPMSIGTAG_MD5: u32 = 1004;
 
 fn usage(success: bool) -> i32 {
     const USAGE: &'static str = "Usage: rpmcanon [OPTIONS] -- SOURCE DESTINATION\n\n\
@@ -51,6 +52,7 @@ fn emit_header(
         ref header_sig,
         ref main_header_bytes,
         ref main_header_hash,
+        ref header_payload_weak_digest,
     }: &rpm_parser::VerifyResult,
     mut dest: Option<&mut dyn std::io::Write>,
     _allow_weak_hashes: AllowWeakHashes,
@@ -69,12 +71,14 @@ fn emit_header(
     if let Some(ref sig) = header_payload_sig {
         hdr.push(RPMSIGTAG_PGP, HeaderEntry::Bin(sig));
     }
+    if let Some(ref weak_digest) = header_payload_weak_digest {
+        hdr.push(RPMSIGTAG_MD5, HeaderEntry::Bin(weak_digest));
+    }
     let mut out_data = vec![0; magic_offset];
     out_data[..magic_offset].copy_from_slice(&main_header.lead());
     hdr.emit(&mut out_data).expect("writes to a vec never fail");
     let fixup = (out_data.len() + 7 & !7) - out_data.len();
     out_data.extend_from_slice(&[0u8; 7][..fixup]);
-    eprintln!("Output data length: {}", out_data.len());
     #[cfg(debug_assertions)]
     rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_weak_hashes, _token).unwrap();
     dest.write_all(&out_data)?;

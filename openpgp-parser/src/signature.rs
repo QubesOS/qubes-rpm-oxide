@@ -121,9 +121,9 @@ pub fn check_hash_algorithm(hash: i32, allow_weak_hashes: AllowWeakHashes) -> Re
         OPENPGP_HASH_SHA384 => Ok(48),
         OPENPGP_HASH_SHA512 => Ok(64),
         OPENPGP_HASH_SHA224 if allow_weak_hashes == AllowWeakHashes::Yes => Ok(28),
+        OPENPGP_HASH_INSECURE_MD5 if allow_weak_hashes == AllowWeakHashes::Yes => Ok(16),
         OPENPGP_HASH_INSECURE_SHA1 if allow_weak_hashes == AllowWeakHashes::Yes => Ok(20),
         // Insecure hash algorithms
-        OPENPGP_HASH_INSECURE_MD5 |
         OPENPGP_HASH_INSECURE_SHA1 |
         OPENPGP_HASH_INSECURE_RIPEMD160 |
         OPENPGP_HASH_INSECURE_MD2 |

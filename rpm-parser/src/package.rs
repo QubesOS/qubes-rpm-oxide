@@ -94,6 +94,9 @@ mod tests {
             header: _,
             header_signature,
             header_payload_signature,
+            header_payload_weak_digest: _,
+            header_sha1_hash: _,
+            header_sha256_hash: _,
         } = signature;
         assert!(header_signature.is_some());
         assert!(header_payload_signature.is_some());

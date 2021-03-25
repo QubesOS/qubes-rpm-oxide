@@ -40,9 +40,15 @@ mod tests {
             header: _,
             header_signature,
             header_payload_signature,
+            header_payload_weak_digest,
+            header_sha1_hash,
+            header_sha256_hash,
         } = load_signature(&mut r, AllowWeakHashes::No, token).unwrap();
         assert!(header_signature.is_some());
         assert!(header_payload_signature.is_some());
+        assert!(header_payload_weak_digest.is_some());
+        assert!(header_sha1_hash.is_some());
+        assert!(header_sha256_hash.is_some());
         let ImmutableHeader {
             header: _,
             payload_digest,

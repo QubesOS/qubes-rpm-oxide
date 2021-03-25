@@ -11,9 +11,10 @@ mod validator;
 pub struct VerifyResult {
     /// The package main header
     pub main_header: crate::MainHeader,
-    /// The header+payload signature.  [`None`] if no such signature should be written.
-    /// If such a signature is present in the original package, it will be verified even if this is
-    /// not necessary, but this field will still be [`None`].
+    /// The header+payload signature.  [`None`] if no such signature should be
+    /// written.  If such a signature is present in the original package, it
+    /// will be verified even if this is not necessary, but this field will
+    /// still be [`None`].
     pub header_payload_sig: Option<Vec<u8>>,
     /// The header signature.  This library requires header signatures.
     pub header_sig: Vec<u8>,
@@ -21,6 +22,9 @@ pub struct VerifyResult {
     pub main_header_bytes: Vec<u8>,
     /// The SHA256 hash of the main header, hex-encoded with a trailing NUL
     pub main_header_hash: Vec<u8>,
+    /// The MD5 header+payload digest (yuck!).  Will only be [`Some`] for old
+    /// packages with no payload digests.
+    pub header_payload_weak_digest: Option<Vec<u8>>,
 }
 
 /// Verify a package
@@ -48,6 +52,7 @@ pub fn verify_package(
     use validator::Validator;
     let mut validator: Validator = Validator::new(None);
     let mut header_payload_sig = None;
+    let mut header_payload_weak_digest = None;
     if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {
         validator.add_signature(sig);
         header_payload_sig = Some(s_bytes);
@@ -57,6 +62,14 @@ pub fn verify_package(
             "Payload signature requested but not found",
         ));
     }
+
+    if let Some(weak_digest) = sig_header.header_payload_weak_digest.take() {
+        header_payload_weak_digest = Some(weak_digest.1.clone());
+        let digest_value = u128::from_be_bytes(weak_digest.1.try_into().expect("length checked earlier"));
+        let _digest_value = format!("{:032x}\0", digest_value);
+        validator.add_untrusted_digest(weak_digest.0, _digest_value.as_bytes().to_vec());
+    }
+
     let mut prelude = [0u8; 16];
 
     // Read the prelude of the main header
@@ -99,11 +112,22 @@ pub fn verify_package(
             },
         )
     })?;
+    let s: Option<(DigestCtx, Vec<u8>)> = sig_header.header_sha1_hash.take();
+    for i in vec![s, sig_header.header_sha256_hash.take()].into_iter() {
+        let i: Option<(DigestCtx, Vec<u8>)> = i;
+        if let Some((mut ctx, value)) = i {
+            ctx.update(&main_header_bytes);
+            if ctx.finalize(true) != value {
+                return Err(Error::new(ErrorKind::InvalidData, "bad digest"));
+            }
+        }
+    }
     validator.set_output(output);
     let main_header = crate::load_immutable(&mut &*main_header_bytes, token)?;
     // This header is signed, so its payload digest is trusted
     match main_header.payload_digest() {
         Ok(s) => {
+            header_payload_weak_digest = None;
             if preserve_old_sig {
                 validator.add_untrusted_digest(s.0, s.1);
             } else {
@@ -111,7 +135,19 @@ pub fn verify_package(
                 validator.add_trusted_digest(s.0, s.1);
             }
         }
-        Err(_) if allow_old_pkgs => {}
+        Err(_) if allow_old_pkgs => {
+            if header_payload_sig.is_none() {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Header signed, but no header+payload signature or payload digest?",
+                ));
+            } else if header_payload_weak_digest.is_none() {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "No digest on the payload",
+                ));
+            }
+        }
         Err(e) => return Err(e),
     };
     let vfy_result = VerifyResult {
@@ -120,6 +156,7 @@ pub fn verify_package(
         header_sig,
         main_header_bytes,
         main_header_hash,
+        header_payload_weak_digest,
     };
     if let Some(ref mut cb) = cb {
         let mut output = validator.set_output(None);
