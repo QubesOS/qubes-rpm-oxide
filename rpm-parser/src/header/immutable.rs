@@ -88,8 +88,10 @@ pub fn load_immutable(r: &mut dyn Read, token: InitToken) -> Result<ImmutableHea
         fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
         fail_if!(tag > 0x7FFF, "type too large");
         match tag_type(tag) {
-            Some((t, is_array)) if t == ty || (tag_class(t) == 2 && tag_class(ty) == 2) => {
-                if !is_array && tag_data.count() != 1 {
+            Some((t, _is_array)) if t == ty || (tag_class(t) == 2 && tag_class(ty) == 2) => {
+                // FIXME this is an RPM bug
+                #[cfg(any())]
+                if !_is_array && tag_data.count() != 1 {
                     bad_data!("Non-array tag {} with count {}", tag, tag_data.count())
                 }
             }
