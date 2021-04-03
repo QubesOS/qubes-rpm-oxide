@@ -241,10 +241,15 @@ fn process_subpacket<'a>(
             }
             _ => Err(Error::IllFormedSignature),
         },
+        // Ignore this
+        SUBPACKET_SIGNER_USER_ID => {
+            let l = reader.len();
+            reader.get_bytes(l).expect("length correct");
+            Ok(())
+        }
         // We reject unknown subpackets to make exploits against RPM less likely
         i @ SUBPACKET_NOTATION |
-        i @ SUBPACKET_POLICY_URI |
-        i @ SUBPACKET_SIGNER_USER_ID | i => Err(Error::UnsupportedCriticalSubpacket(i)),
+        i @ SUBPACKET_POLICY_URI | i => Err(Error::UnsupportedCriticalSubpacket(i)),
     }
 }
 
