@@ -242,9 +242,9 @@ fn process_subpacket<'a>(
             _ => Err(Error::IllFormedSignature),
         },
         // We reject unknown subpackets to make exploits against RPM less likely
-        SUBPACKET_NOTATION |
-        SUBPACKET_POLICY_URI |
-        SUBPACKET_SIGNER_USER_ID | _ => Err(Error::UnsupportedCriticalSubpacket),
+        i @ SUBPACKET_NOTATION |
+        i @ SUBPACKET_POLICY_URI |
+        i @ SUBPACKET_SIGNER_USER_ID | i => Err(Error::UnsupportedCriticalSubpacket(i)),
     }
 }
 

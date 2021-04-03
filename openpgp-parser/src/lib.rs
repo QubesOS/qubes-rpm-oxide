@@ -59,5 +59,5 @@ pub enum Error {
     /// No creation time
     NoCreationTime,
     /// Unsupported critical subpacket
-    UnsupportedCriticalSubpacket,
+    UnsupportedCriticalSubpacket(u8),
 }
