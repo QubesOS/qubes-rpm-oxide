@@ -1,4 +1,6 @@
-use rpm_crypto::{transaction::RpmKeyring, DigestCtx, Signature};
+use rpm_crypto::transaction::RpmKeyring;
+use rpm_crypto::{DigestCtx, Signature};
+use std;
 use std::io::{Result, Write};
 
 /// Something that can be cryptographically verified
@@ -14,22 +16,23 @@ enum Verifyable {
 impl Verifyable {
     fn update(&mut self, data: &[u8]) {
         match self {
-            Self::UntrustedDigest(dgst, _) | Self::TrustedDigest(dgst, _) => dgst.update(data),
-            Self::Signature(sig) => sig.update(data),
+            &mut Verifyable::UntrustedDigest(ref mut dgst, _)
+            | &mut Verifyable::TrustedDigest(ref mut dgst, _) => dgst.update(data),
+            &mut Verifyable::Signature(ref mut sig) => sig.update(data),
         }
     }
 
     fn trusted(&self) -> bool {
         match self {
-            Self::Signature(_) | Self::TrustedDigest(_, _) => true,
-            Self::UntrustedDigest(_, _) => false,
+            &Verifyable::Signature(_) | &Verifyable::TrustedDigest(_, _) => true,
+            &Verifyable::UntrustedDigest(_, _) => false,
         }
     }
 }
 
 pub(super) struct Validator<'a> {
     objects: Vec<Verifyable>,
-    output: Option<&'a mut dyn Write>,
+    output: Option<&'a mut Write>,
 }
 
 impl<'a> Write for Validator<'a> {
@@ -54,7 +57,7 @@ impl<'a> Write for Validator<'a> {
 
 impl<'a> Validator<'a> {
     /// Creates a [`Validator`]
-    pub(super) fn new(output: Option<&'a mut dyn Write>) -> Self {
+    pub(super) fn new(output: Option<&'a mut Write>) -> Self {
         Self {
             objects: vec![],
             output,
@@ -65,10 +68,7 @@ impl<'a> Validator<'a> {
     /// untrusted at this point.
     ///
     /// Returns the old writer.
-    pub(super) fn set_output(
-        &mut self,
-        output: Option<&'a mut dyn Write>,
-    ) -> Option<&'a mut dyn Write> {
+    pub(super) fn set_output(&mut self, output: Option<&'a mut Write>) -> Option<&'a mut Write> {
         std::mem::replace(&mut self.output, output)
     }
 
@@ -108,7 +108,9 @@ impl<'a> Validator<'a> {
             trusted |= i.trusted();
             no_bad_found &= match i {
                 Verifyable::TrustedDigest(ctx, digest)
-                | Verifyable::UntrustedDigest(ctx, digest) => ctx.finalize(true) == digest,
+                | Verifyable::UntrustedDigest(ctx, digest) => {
+                    ctx.finalize((digest.len() & 1) != 0) == digest
+                }
                 Verifyable::Signature(sig) => keyring.validate_sig(sig).is_ok(),
             };
         }

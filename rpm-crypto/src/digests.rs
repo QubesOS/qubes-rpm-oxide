@@ -1,10 +1,12 @@
 use openpgp_parser::AllowWeakHashes;
+use std;
+use std::io::{Result as IResult, Write};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 
 enum ExternDigestCtx {}
 
-#[repr(transparent)]
+#[repr(C)]
 pub struct DigestCtx(*mut ExternDigestCtx);
 
 pub fn rpm_hash_len(alg: i32) -> usize {
@@ -18,7 +20,7 @@ extern "C" {
 
 #[link(name = "rpmio")]
 extern "C" {
-    fn rpmDigestLength(tag: std::os::raw::c_int) -> usize;
+    fn rpmDigestLength(tag: c_int) -> usize;
     fn rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
     fn rpmDigestInit(hash_algo: c_int, flags: u32) -> DigestCtx;
     fn rpmDigestUpdate(s: *mut ExternDigestCtx, data: *const c_void, len: usize) -> c_int;
@@ -42,13 +44,13 @@ impl Clone for DigestCtx {
     }
 }
 
-impl std::io::Write for DigestCtx {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+impl Write for DigestCtx {
+    fn write(&mut self, buf: &[u8]) -> IResult<usize> {
         self.update(buf);
         Ok(buf.len())
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IResult<()> {
         Ok(())
     }
 }
@@ -62,7 +64,7 @@ impl DigestCtx {
     ) -> Result<DigestCtx, ()> {
         use openpgp_parser::signature::check_hash_algorithm;
         let len = check_hash_algorithm(algorithm.into(), allow_weak_hashes).map_err(drop)?;
-        if rpm_hash_len(algorithm.into()) != len.into() {
+        if rpm_hash_len(algorithm as _) != len as _ {
             return Err(());
         }
         let raw_p = unsafe { rpmDigestInit(algorithm.into(), 0) };
@@ -103,14 +105,14 @@ mod tests {
         for &i in &[8, 9, 10] {
             assert_eq!(
                 unsafe { rpmDigestLength(i) },
-                check_hash_algorithm(i, AllowWeakHashes::No).unwrap().into()
+                check_hash_algorithm(i, AllowWeakHashes::No).unwrap() as usize
             );
         }
     }
     #[test]
     fn check_rpm_crypto() {
         for &i in &[8, 9, 10] {
-            let mut s = DigestCtx::init(i, AllowWeakHashes::No, crate::init()).unwrap();
+            let mut s = DigestCtx::init(i, AllowWeakHashes::No, super::super::init()).unwrap();
             println!("Initialized RPM crypto context");
             s.update(b"this is a test!");
             println!("Finalizing");

@@ -1,9 +1,10 @@
 //! FFI code
+use std::os::raw::c_int;
 
 #[link(name = "rpm")]
 extern "C" {
-    fn rpmTagGetType(tag: std::os::raw::c_int) -> std::os::raw::c_int;
-    fn rpmTagTypeGetClass(tag: std::os::raw::c_int) -> std::os::raw::c_int;
+    fn rpmTagGetType(tag: c_int) -> c_int;
+    fn rpmTagTypeGetClass(tag: c_int) -> c_int;
 }
 
 #[repr(u32)]
@@ -56,7 +57,7 @@ pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
     ))
 }
 
-pub fn tag_class(ty: TagType) -> std::os::raw::c_int {
+pub fn tag_class(ty: TagType) -> c_int {
     unsafe { rpmTagTypeGetClass(ty as _) }
 }
 

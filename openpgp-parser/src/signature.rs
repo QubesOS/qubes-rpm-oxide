@@ -3,7 +3,7 @@
 use super::{packet, Error, Reader};
 use packet::get_varlen_bytes;
 
-use core::convert::TryInto;
+extern crate core;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 /// Should weak hashes (less than 256 bits and vulnerable to collisions) be allowed?
@@ -18,7 +18,7 @@ pub enum AllowWeakHashes {
 /// slice.
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     reader.read(|reader| {
-        let bits = 7 + usize::from(reader.be_u16()?);
+        let bits = 7 + reader.be_u16()? as usize;
         let mpi_buf = reader.get_bytes(bits >> 3)?;
         // don’t use ‘Reader::byte’, which mutates the reader
         if let Some(first_byte) = mpi_buf.get(0) {
@@ -140,7 +140,6 @@ pub fn check_hash_algorithm(hash: i32, allow_weak_hashes: AllowWeakHashes) -> Re
 
 /// Information about a signature
 #[derive(Clone, Debug)]
-#[non_exhaustive]
 pub struct SigInfo {
     /// Hash algorithm
     pub hash_alg: u8,
@@ -210,7 +209,7 @@ fn process_subpacket<'a>(
             let timestamp = reader.be_u32()?;
             if time != 0 && timestamp >= time {
                 Err(Error::SignatureExpired)
-            } else if std::mem::replace(&mut id.expiration_time, Some(timestamp)).is_some() {
+            } else if core::mem::replace(&mut id.expiration_time, Some(timestamp)).is_some() {
                 Err(Error::IllFormedSignature)
             } else {
                 Ok(())
@@ -220,7 +219,7 @@ fn process_subpacket<'a>(
             let timestamp = reader.be_u32()?;
             if time != 0 && timestamp > time {
                 Err(Error::SignatureNotValidYet)
-            } else if std::mem::replace(&mut id.creation_time, Some(timestamp)).is_some() {
+            } else if core::mem::replace(&mut id.creation_time, Some(timestamp)).is_some() {
                 Err(Error::IllFormedSignature)
             } else {
                 Ok(())
@@ -230,16 +229,22 @@ fn process_subpacket<'a>(
             if id.id.is_some() {
                 return Err(Error::IllFormedSignature);
             }
-            id.id = Some(reader.get_bytes(8)?.try_into().expect("length correct"));
+            let mut res = [0u8; 8];
+            res[..].copy_from_slice(reader.get_bytes(8)?);
+            id.id = Some(res);
             Ok(())
         }
         // RPM doesn’t care about this, but we do
-        SUBPACKET_FINGERPRINT => match reader.get_bytes(21)? {
-            &[4, ref fpr @ ..] if id.fpr.is_none() => {
-                id.fpr = Some(fpr.try_into().expect("length is correct; qed"));
+        SUBPACKET_FINGERPRINT => {
+            let b = reader.get_bytes(21)?;
+            if b[0] == 4 && id.fpr.is_none() {
+                let mut res = [0u8; 20];
+                res[..].copy_from_slice(&b[1..]);
+                id.fpr = Some(res);
                 Ok(())
+            } else {
+                Err(Error::IllFormedSignature)
             }
-            _ => Err(Error::IllFormedSignature),
         },
         // Ignore this
         SUBPACKET_SIGNER_USER_ID => {
@@ -289,7 +294,7 @@ fn parse_packet_body<'a>(
     eprintln!("Version is {}", version);
     let pkey_alg;
     let hash_alg;
-    let key_id: [u8; 8];
+    let mut key_id: [u8; 8];
     let mut siginfo = InternalSigInfo {
         id: None,
         fpr: None,
@@ -302,7 +307,8 @@ fn parse_packet_body<'a>(
                 return Err(Error::IllFormedSignature);
             }
             siginfo.creation_time = Some(reader.be_u32()?);
-            key_id = u64::to_be_bytes(reader.be_u64()?);
+            key_id = [0u8; 8];
+            key_id.copy_from_slice(reader.get_bytes(8)?);
             // Get the public-key algorithm
             pkey_alg = reader.byte()?;
             hash_alg = reader.byte()?;
@@ -316,7 +322,7 @@ fn parse_packet_body<'a>(
             hash_alg = reader.byte()?;
             let hashed_subpackets = reader.be_u16()?;
             Reader::read_all(
-                reader.get_bytes(hashed_subpackets.into())?,
+                reader.get_bytes(hashed_subpackets as _)?,
                 Error::TrailingJunk,
                 |reader| {
                     Ok(while !reader.is_empty() {
@@ -334,11 +340,22 @@ fn parse_packet_body<'a>(
             // The only non-hashed subpacket allowed is the key ID, and only if
             // it has not already been seen.
             key_id = match siginfo.id {
-                None if reader.get_bytes(4)? == &[0, 10, 9, SUBPACKET_ISSUER_KEYID] => {
-                    reader.get_bytes(8)?.try_into().expect("length correct")
+                None => {
+                    if reader.get_bytes(4)? == &[0, 10, 9, SUBPACKET_ISSUER_KEYID] {
+                        let mut res = [0u8; 8];
+                        res.copy_from_slice(&reader.get_bytes(8)?);
+                        res
+                    } else {
+                        return Err(Error::IllFormedSignature);
+                    }
                 }
-                Some(e) if reader.be_u16()? == 0 => e,
-                _ => return Err(Error::IllFormedSignature),
+                Some(e) => {
+                    if reader.be_u16()? == 0 {
+                        e
+                    } else {
+                        return Err(Error::IllFormedSignature);
+                    }
+                }
             };
             if let Some(s) = siginfo.fpr {
                 if s[12..] != key_id[..] {
@@ -399,7 +416,7 @@ mod tests {
             Error::PrematureEOF
         );
         let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0, AllowWeakHashes::No).unwrap();
-        assert_eq!(u64::from_be_bytes(sig.key_id), 0x28A45C93B0B5B6E0);
+        assert_eq!(&sig.key_id[..], b"\x28\xA4\x5C\x93\xB0\xB5\xB6\xE0");
         assert_eq!(sig.creation_time, 1611626266);
         assert_eq!(sig.fingerprint.unwrap()[12..], sig.key_id[..]);
     }

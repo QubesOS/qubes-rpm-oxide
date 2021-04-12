@@ -1,3 +1,7 @@
+#![cfg(any())]
+extern crate rpm_parser;
+extern crate rpm_crypto;
+extern crate openpgp_parser;
 use openpgp_parser::AllowWeakHashes;
 use std::fs::File;
 use std::io::{copy, Error, ErrorKind, Result};

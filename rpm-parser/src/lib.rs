@@ -6,8 +6,10 @@
 //! This library does not support building or installing RPM packages.  These
 //! features can be found in the `rpm` crate, which uses the system RPM library.
 
-#![deny(warnings)]
-use std;
+// #![deny(warnings)]
+#![feature(i128_type)]
+#![feature(try_from)]
+#![feature(const_fn)]
 macro_rules! size_of {
     ($t:ty) => {
         $crate::std::mem::size_of::<$t>()
@@ -33,13 +35,20 @@ macro_rules! bad_data {
 }
 
 macro_rules! fail_if {
-    ($c:expr, $($i:expr),*$(,)?) => {
+    ($c:expr, $($i:expr),*,) => {
         if $c {
             bad_data!($($i),*)
         }
-    }
+    };
+    ($c:expr, $($i:expr),*) => {
+        if $c {
+            bad_data!($($i),*)
+        }
+    };
 }
 
+extern crate openpgp_parser;
+extern crate rpm_crypto;
 mod ffi;
 mod header;
 mod lead;

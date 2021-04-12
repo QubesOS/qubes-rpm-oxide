@@ -5,9 +5,11 @@
 //! code.
 
 #![forbid(improper_ctypes)]
-#![deny(warnings)]
+#![feature(const_fn)]
+// #![deny(warnings)]
 
 use openpgp_parser::{AllowWeakHashes, Error};
+extern crate openpgp_parser;
 
 mod digests;
 mod signatures;

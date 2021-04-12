@@ -1,10 +1,15 @@
 //! A buffer for parsing untrusted data.  This is similar to, but distinct from, the `untrusted`
 //! crate on `crates.io`.
 
-use core::{convert::TryInto, mem::size_of};
+#[cfg(not(feature = "std"))]
+use core::mem::size_of;
+#[cfg(feature = "std")]
+use std::mem::size_of;
+#[cfg(feature = "std")]
+extern crate std;
 #[cfg(feature = "std")]
 impl From<EOFError> for std::io::Error {
-    fn from(EOFError: EOFError) -> Self {
+    fn from(_: EOFError) -> Self {
         std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF")
     }
 }
@@ -13,7 +18,6 @@ impl From<EOFError> for std::io::Error {
 ///
 /// This type is guaranteed to have the same representation as `&'a [u8]`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
-#[repr(transparent)]
 pub struct Reader<'a> {
     untrusted_buffer: &'a [u8],
 }
@@ -27,9 +31,12 @@ macro_rules! gen_be_offset {
         $(#[$s])*
         pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
             let range = offset..offset.wrapping_add(size_of::<$t>());
-            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-            // LLVM is able to optimize away the panic
-            Ok(<$t>::from_be_bytes(data.expect("length is correct")))
+            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?;
+            let mut res: $t = 0;
+            for i in 0..size_of::<$t>() {
+                res = res << 8 | data[i] as $t
+            }
+            Ok(res)
         }
     )+};
 }
@@ -40,8 +47,11 @@ macro_rules! gen_le {
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
             let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
-            // LLVM is able to optimize away the panic
-            Ok(<$t>::from_le_bytes(untrusted_buffer.try_into().expect("length is correct")))
+            let mut res: $t = 0;
+            for i in 0..size_of::<$t>() {
+                res = res << 8 | data[size_of::<$i>() - 1 - i] as $t
+            }
+            Ok(res)
         }
     )+}
 }
@@ -52,8 +62,11 @@ macro_rules! gen_be {
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
             let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
-            // LLVM is able to optimize away the panic
-            Ok(<$t>::from_be_bytes(untrusted_buffer.try_into().expect("length is correct")))
+            let mut res: $t = 0;
+            for i in 0..size_of::<$t>() {
+                res = res << 8 | untrusted_buffer[i] as $t
+            }
+            Ok(res)
         }
     )+}
 }
@@ -65,8 +78,10 @@ macro_rules! gen_le_offset {
         pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
             let range = offset..offset.wrapping_add(size_of::<$t>());
             let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
-            // LLVM is able to optimize away the panic
-            Ok(<$t>::from_le_bytes(data.expect("length is correct")))
+            for i in 0..size_of::<$t>() {
+                res = res << 8 | data[size_of::<$i>() - 1 - i] as $t
+            }
+            Ok(res)
         }
     )+}
 }
@@ -120,9 +135,12 @@ impl<'a> Reader<'a> {
     /// assert!(nonempty_reader.maybe_byte().is_none());
     /// ```
     pub fn maybe_byte(&mut self) -> Option<u8> {
-        let (&s, untrusted_rest) = self.untrusted_buffer.split_first()?;
-        self.untrusted_buffer = untrusted_rest;
-        Some(s)
+        self.untrusted_buffer
+            .split_first()
+            .map(|(&s, untrusted_rest)| {
+                self.untrusted_buffer = untrusted_rest;
+                s
+            })
     }
 
     /// Same as [`Self::maybe_byte`], but fails if the buffer is empty.
@@ -150,6 +168,7 @@ impl<'a> Reader<'a> {
         self.untrusted_buffer
     }
 
+    #[cfg(any())]
     gen_le! {
         /// Gets a little-endian `u16` value
         ///
@@ -220,6 +239,7 @@ impl<'a> Reader<'a> {
         (be_u64, u64)
     }
 
+    #[cfg(any())]
     gen_le_offset! {
         /// Gets a little-endian `u16` value
         ///
@@ -407,7 +427,7 @@ impl<'a> Reader<'a> {
 }
 
 impl From<EOFError> for super::Error {
-    fn from(EOFError: EOFError) -> super::Error {
+    fn from(_: EOFError) -> super::Error {
         super::Error::PrematureEOF
     }
 }

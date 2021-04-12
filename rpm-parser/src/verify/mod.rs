@@ -1,7 +1,10 @@
 //! RPM package verification
 
-use crate::SignatureHeader;
-use rpm_crypto::{transaction::RpmKeyring, DigestCtx, InitToken};
+use super::SignatureHeader;
+use openpgp_parser;
+use rpm_crypto::transaction::RpmKeyring;
+use rpm_crypto::{DigestCtx, InitToken};
+use std;
 use std::convert::TryInto;
 use std::io::{copy, Error, ErrorKind, Read, Result, Write};
 
@@ -10,7 +13,7 @@ mod validator;
 /// Package verification result
 pub struct VerifyResult {
     /// The package main header
-    pub main_header: crate::MainHeader,
+    pub main_header: super::MainHeader,
     /// The header+payload signature.  [`None`] if no such signature should be
     /// written.  If such a signature is present in the original package, it
     /// will be verified even if this is not necessary, but this field will
@@ -40,16 +43,16 @@ pub struct VerifyResult {
 /// - `output`: Output stream that receives the (not yet validated!) bytes, for
 ///   streaming support.
 pub fn verify_package(
-    src: &mut dyn Read,
+    src: &mut Read,
     sig_header: &mut SignatureHeader,
     keyring: &RpmKeyring,
     allow_old_pkgs: bool,
     preserve_old_sig: bool,
     token: InitToken,
-    mut cb: Option<&mut dyn FnMut(&VerifyResult, Option<&mut dyn Write>) -> Result<()>>,
-    output: Option<&mut dyn Write>,
+    mut cb: Option<&mut FnMut(&VerifyResult, Option<&mut Write>) -> Result<()>>,
+    output: Option<&mut Write>,
 ) -> std::io::Result<VerifyResult> {
-    use validator::Validator;
+    use self::validator::Validator;
     let mut validator: Validator = Validator::new(None);
     let mut header_payload_sig = None;
     let mut header_payload_weak_digest = None;
@@ -65,9 +68,7 @@ pub fn verify_package(
 
     if let Some(weak_digest) = sig_header.header_payload_weak_digest.take() {
         header_payload_weak_digest = Some(weak_digest.1.clone());
-        let digest_value = u128::from_be_bytes(weak_digest.1.try_into().expect("length checked earlier"));
-        let _digest_value = format!("{:032x}\0", digest_value);
-        validator.add_untrusted_digest(weak_digest.0, _digest_value.as_bytes().to_vec());
+        validator.add_untrusted_digest(weak_digest.0, weak_digest.1.clone());
     }
 
     let mut prelude = [0u8; 16];
@@ -75,7 +76,7 @@ pub fn verify_package(
     // Read the prelude of the main header
     let (index_length, data_length) = {
         src.read_exact(&mut prelude)?;
-        crate::parse_header_magic(&mut prelude)?
+        super::parse_header_magic(&mut prelude)?
     };
 
     let main_header_bytes = {
@@ -123,7 +124,7 @@ pub fn verify_package(
         }
     }
     validator.set_output(output);
-    let main_header = crate::load_immutable(&mut &*main_header_bytes, token)?;
+    let main_header = super::load_immutable(&mut &*main_header_bytes, token)?;
     // This header is signed, so its payload digest is trusted
     match main_header.payload_digest() {
         Ok(s) => {
@@ -176,10 +177,9 @@ pub fn verify_package(
 
 #[cfg(test)]
 mod tests {
-    use rpm_crypto::{
-        transaction::{RpmKeyring, RpmTransactionSet},
-        InitToken,
-    };
+    use rpm_crypto;
+    use rpm_crypto::transaction::{RpmKeyring, RpmTransactionSet};
+    use rpm_crypto::InitToken;
     thread_local! {
         static KEYRING: RpmKeyring = {
             let tx = TOKEN.with(|&s|RpmTransactionSet::new(s));
@@ -189,8 +189,8 @@ mod tests {
         static SHA256: DigestCtx = TOKEN.with(|&t|DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No,t))
             .expect("SHA-256 is supported");
     }
+    use super::validator::Validator;
     use super::*;
-    use validator::Validator;
     const EMPTY_SHA256: &'static [u8] =
         &*b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\0";
     const A_SHA256: &'static [u8] =
@@ -229,7 +229,7 @@ mod tests {
         let (keyring, _, sha256) = globals();
         let mut v = Validator::new(None);
         v.add_trusted_digest(sha256.clone(), EMPTY_SHA256.to_owned());
-        assert!(matches!(v.write(b"a"), Ok(1)));
+        assert_eq!(v.write(b"a").unwrap(), 1);
         v.validate(&keyring).unwrap_err();
     }
 

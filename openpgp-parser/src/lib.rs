@@ -5,7 +5,7 @@
 //! will be passed to a different OpenPGP implementation.
 
 #![forbid(missing_docs, unsafe_code, deprecated)]
-#![deny(warnings)]
+// #![deny(warnings)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 pub use buffer::{EOFError, Reader};
 mod buffer;

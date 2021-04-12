@@ -1,5 +1,10 @@
 #![feature(rustc_private)] // hack hack
+#![feature(libc)]
 extern crate libc;
+extern crate openpgp_parser;
+extern crate rpm_crypto;
+extern crate rpm_parser;
+extern crate rpm_writer;
 
 use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::RpmTransactionSet;
@@ -7,11 +12,9 @@ use rpm_writer::{HeaderBuilder, HeaderEntry};
 use std::ffi::{CStr, CString, OsStr};
 use std::fs::{File, OpenOptions};
 use std::io::{Result, Write};
-use std::os::unix::{
-    ffi::OsStrExt,
-    fs::OpenOptionsExt,
-    io::{AsRawFd, FromRawFd},
-};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::path::Path;
 
 fn main() {
@@ -54,7 +57,7 @@ fn emit_header(
         ref main_header_hash,
         ref header_payload_weak_digest,
     }: &rpm_parser::VerifyResult,
-    mut dest: Option<&mut dyn std::io::Write>,
+    mut dest: Option<&mut std::io::Write>,
     _allow_weak_hashes: AllowWeakHashes,
     _token: rpm_crypto::InitToken,
 ) -> std::io::Result<()> {
@@ -68,10 +71,10 @@ fn emit_header(
         ),
     );
     hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*header_sig));
-    if let Some(ref sig) = header_payload_sig {
+    if let &Some(ref sig) = header_payload_sig {
         hdr.push(RPMSIGTAG_PGP, HeaderEntry::Bin(sig));
     }
-    if let Some(ref weak_digest) = header_payload_weak_digest {
+    if let &Some(ref weak_digest) = header_payload_weak_digest {
         hdr.push(RPMSIGTAG_MD5, HeaderEntry::Bin(weak_digest));
     }
     let mut out_data = vec![0; magic_offset];
@@ -94,9 +97,9 @@ fn process_file(
     preserve_old_signature: bool,
     token: rpm_crypto::InitToken,
 ) -> Result<()> {
-    let emit_header: &mut dyn FnMut(
+    let emit_header: &mut FnMut(
         &rpm_parser::VerifyResult,
-        Option<&mut dyn std::io::Write>,
+        Option<&mut std::io::Write>,
     ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_weak_hashes, token);
     let mut s = File::open(src)?;
     // Ignore the lead
@@ -273,7 +276,7 @@ fn inner_main() -> i32 {
     let (src, dst) = (args[0].clone(), args[1].clone());
     let tx = RpmTransactionSet::new(token);
     if directory {
-        todo!()
+        unimplemented!()
     }
     match process_file(
         &tx,

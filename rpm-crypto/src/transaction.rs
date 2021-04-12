@@ -3,10 +3,10 @@ use std::os::raw::c_int;
 
 enum Rpmts {}
 enum RpmKeyring_ {}
-#[repr(transparent)]
+#[repr(C)]
 pub struct RpmTransactionSet(*mut Rpmts);
 
-#[repr(transparent)]
+#[repr(C)]
 pub struct RpmKeyring(*mut RpmKeyring_);
 
 #[link(name = "rpm")]

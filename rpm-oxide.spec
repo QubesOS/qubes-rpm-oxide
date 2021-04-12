@@ -1,0 +1,51 @@
+# The Qubes OS Project, https://www.qubes-os.org
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, see <https://www.gnu.org/licenses/>.
+
+Name:		qubes-rpm-oxide
+Version:	0.1.0
+Release:	1%{dist}
+Summary:	RPM Canonicalization
+
+Group:		Qubes
+Vendor:		Invisible Things Lab
+License:	MIT OR Apache-2.0
+URL:		https://www.qubes-os.org
+
+BuildRequires:  rust
+BuildRequires:  cargo
+BuildRequires:  rpm-devel
+
+Requires:       rpm >= 4.14.2.1-4
+
+Source0: %{name}-%{version}.tar.gz
+
+%description
+RPM canonicalization and verification tools
+
+%prep
+%setup -q
+%build
+RUSTFLAGS='-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now' RUSTC_BOOTSTRAP=1 cargo build --all-features --release
+%install
+install -D -m 0755 -- target/release/rpmcanon "$RPM_BUILD_ROOT"/%_bindir/rpmcanon
+%check
+RUSTC_BOOTSTRAP=1 cargo test --all-features --release
+%clean
+rm -rf "$RPM_BUILD_ROOT" '%{name}-%{version}'
+%files
+%attr(755,root,root) %dir /usr/bin
+%attr(755,root,root) /usr/bin/rpmcanon
+%changelog
+

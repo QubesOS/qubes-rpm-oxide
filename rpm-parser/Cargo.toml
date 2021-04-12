@@ -2,12 +2,13 @@
 name = "rpm-parser"
 version = "0.1.0"
 authors = ["Demi Marie Obenour <athena@invisiblethingslab.com>"]
-edition = "2018"
+# edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 openpgp-parser = { path = "../openpgp-parser", version = "0.1.0", features = ["std"] }
 rpm-crypto = { path = "../rpm-crypto", version = "0.1.0" }
 
-[[bin]]
-name = "rpmcheck"
-path = "bin/rpmcheck.rs"
+#[[bin]]
+#name = "rpmcheck"
+#path = "bin/rpmcheck.rs"

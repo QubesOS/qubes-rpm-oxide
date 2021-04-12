@@ -1,4 +1,5 @@
 //! Utility functions for parsing OpenPGP packets
+#![allow(ellipsis_inclusive_range_patterns)]
 
 use super::{Error, Reader};
 
@@ -24,12 +25,12 @@ pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], 
     #[cfg(test)]
     eprintln!("Keybyte is {}, reader length is {}", keybyte, reader.len());
     let len: usize = match keybyte {
-        0..=191 => keybyte.into(),
-        192..=223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
+        0...191 => keybyte.into(),
+        192...223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
+        255 => reader.be_u32()? as _,
         // Partial lengths are deliberately unsupported, as we don’t handle PGP signed and/or
         // encrypted data ourselves.
-        224..=254 => return Err(Error::PartialLength),
-        255 => reader.be_u32()? as _,
+        _ => return Err(Error::PartialLength),
     };
     Ok(reader.get_bytes(len)?)
 }
@@ -101,7 +102,7 @@ impl<'a> Packet<'a> {
         let tag_byte = self.tag | 0b1100_0000u8;
         let len = self.buffer.len();
         match len {
-            0..=191 => {
+            0...191 => {
                 // 1-byte
                 let mut v = Vec::with_capacity(2 + len);
                 v.push(tag_byte);
@@ -109,7 +110,7 @@ impl<'a> Packet<'a> {
                 v.extend_from_slice(self.buffer);
                 v
             }
-            192..=8383 => {
+            192...8383 => {
                 // 2-byte
                 let mut v = Vec::with_capacity(3 + len);
                 let len = len - 192;
@@ -123,7 +124,12 @@ impl<'a> Packet<'a> {
                 // 5-byte
                 let mut v = Vec::with_capacity(6 + len);
                 v.push(tag_byte);
-                v.extend_from_slice(&(len as u32).to_be_bytes());
+                v.extend_from_slice(&[
+                    (len >> 24) as u8,
+                    (len >> 16) as u8,
+                    (len >> 8) as u8,
+                    len as u8,
+                ]);
                 v.extend_from_slice(self.buffer);
                 v
             }

@@ -3,10 +3,11 @@
 //! The lead is a 96-byte data structure at the start of every RPM package.
 //! Most of its functionality has been replaced by the header.
 
+use std;
 use std::io::{Read, Result};
 use std::mem::{size_of, zeroed};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 #[repr(packed)]
 pub struct RPMLead {
     magic: [u8; 4],
@@ -64,7 +65,7 @@ impl RPMLead {
     }
 }
 
-pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
+pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
     let _: [u8; 96] = [0u8; size_of::<RPMLead>()];
     // FIXME replace with safe code
     let lead = unsafe {
@@ -82,9 +83,9 @@ pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
     );
     fail_if!(lead.ty() > 1, "unknown package type {}", lead.ty());
     let mut seen_nul = false;
-    for &i in &lead.name {
+    for &i in &lead.name[..] {
         match i {
-            b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'..=b'9'
+            b'A'...b'Z' | b'a'...b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'...b'9'
                 if !seen_nul => {}
             b'\0' => seen_nul = true,
             _ => bad_data!("invalid package name"),

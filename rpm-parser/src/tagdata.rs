@@ -1,5 +1,7 @@
 //! Routines for handling RPM tag data entries
 
+use std;
+
 /// An RPM tag data entry
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 #[repr(C)]
@@ -12,7 +14,7 @@ pub struct TagData {
 
 impl TagData {
     /// Creates a single [`TagData`] entry
-    pub const fn new(tag: u32, ty: u32, offset: u32, count: u32) -> Self {
+    pub fn new(tag: u32, ty: u32, offset: u32, count: u32) -> Self {
         Self {
             tag: u32::to_be(tag),
             ty: u32::to_be(ty),

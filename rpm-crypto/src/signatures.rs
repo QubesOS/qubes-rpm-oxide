@@ -1,9 +1,10 @@
 use super::InitToken;
 use openpgp_parser::{signature, AllowWeakHashes, Error};
+use std;
 use std::os::raw::{c_int, c_uint};
 enum RpmPgpDigParams {}
 
-#[repr(transparent)]
+#[repr(C)]
 pub struct Signature(*mut RpmPgpDigParams);
 
 impl Signature {
@@ -36,10 +37,7 @@ impl Signature {
 
     /// Retrieve the public key algorithm of the signature
     pub fn public_key_algorithm(&self) -> u8 {
-        use std::convert::TryInto;
-        let alg = unsafe { pgpDigParamsAlgo(self.0, 6) };
-        alg.try_into()
-            .expect("OpenPGP public key algorithms always fit in a u8; qed")
+        (unsafe { pgpDigParamsAlgo(self.0, 6) }) as _
     }
 }
 
