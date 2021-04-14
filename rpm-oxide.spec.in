@@ -14,7 +14,7 @@
 # License along with this library; if not, see <https://www.gnu.org/licenses/>.
 
 Name:		qubes-rpm-oxide
-Version:	0.1.0
+Version:	@VERSION@
 Release:	1%{dist}
 Summary:	RPM Canonicalization
 
