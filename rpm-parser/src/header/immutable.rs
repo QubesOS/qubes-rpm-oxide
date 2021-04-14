@@ -189,7 +189,7 @@ pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader>
             }
             Ok(())
         };
-        load_header(r, 63, &mut cb)?
+        load_header(r, 63, &mut cb, false)?
     };
     match (name, os, arch, version, release) {
         (Some(name), Some(os), Some(arch), Some(version), Some(release)) => Ok(ImmutableHeader {

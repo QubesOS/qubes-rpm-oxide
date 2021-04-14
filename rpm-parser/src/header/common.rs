@@ -65,6 +65,7 @@ pub(super) fn load_header<'a>(
     r: &mut Read,
     region_tag: u32,
     cb: &mut FnMut(TagType, &TagData, &[u8]) -> Result<()>,
+    is_signature: bool,
 ) -> Result<Header> {
     let (index_length, data_length) = read_header(r)?;
     let mut index = vec![Default::default(); index_length as _];
@@ -152,9 +153,19 @@ pub(super) fn load_header<'a>(
                         bad_data!("Entry {:?} is a too long string array", entry)
                     }
                     let r = reader.get_bytes(len).expect("length is in bounds; qed");
-                    match std::str::from_utf8(r) {
-                        Ok(_) => r,
-                        Err(e) => bad_data!("String entry is not valid UTF-8: {}", e),
+                    if is_signature {
+                        // All strings in the signature header are printable ASCII
+                        for &i in &r[..len-1] {
+                            if i < b' ' || i > 0x7E {
+                                bad_data!("Non-printable-ASCII character in signature header string");
+                            }
+                        }
+                        r
+                    } else {
+                        match std::str::from_utf8(r) {
+                            Ok(_) => r,
+                            Err(e) => bad_data!("String entry is not valid UTF-8: {}", e),
+                        }
                     }
                 }
             };

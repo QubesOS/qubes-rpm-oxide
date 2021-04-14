@@ -181,7 +181,7 @@ pub fn load_signature(
                 }
             }
         };
-        load_header(r, 62, &mut cb)?
+        load_header(r, 62, &mut cb, true)?
     };
     let remainder = header.data.len() & 7;
     if remainder != 0 {
