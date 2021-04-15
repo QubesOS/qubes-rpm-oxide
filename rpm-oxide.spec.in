@@ -49,4 +49,4 @@ rm -rf "$RPM_BUILD_ROOT" '%{name}-%{version}'
 %attr(755,root,root) %dir /usr/bin
 %attr(755,root,root) /usr/bin/rpmcanon
 %changelog
-
+@CHANGELOG@
