@@ -29,6 +29,20 @@ fn write_be_u16(buf: &mut [u8], s: u16) {
     buf[1] = s as u8
 }
 
+pub fn check_package_name(name: &[u8]) -> Result<()> {
+    let mut seen_nul = false;
+    for &i in &name[..] {
+        match i {
+            b'A'...b'Z' | b'a'...b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'...b'9'
+                if !seen_nul => {}
+            b'\0' => seen_nul = true,
+            _ => bad_data!("invalid package name"),
+        }
+    }
+    fail_if!(!seen_nul, "package name not NUL-terminated");
+    Ok(())
+}
+
 impl RPMLead {
     pub(crate) fn new(ty: bool, archnum: u16, osnum: u16, name: &[u8]) -> Self {
         let mut name_dup = [0u8; 66];
@@ -111,16 +125,7 @@ pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
         lead.minor
     );
     fail_if!(lead.ty() > 1, "unknown package type {}", lead.ty());
-    let mut seen_nul = false;
-    for &i in &lead.name[..] {
-        match i {
-            b'A'...b'Z' | b'a'...b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'...b'9'
-                if !seen_nul => {}
-            b'\0' => seen_nul = true,
-            _ => bad_data!("invalid package name"),
-        }
-    }
-    fail_if!(!seen_nul, "package name not NUL-terminated");
+    check_package_name(&lead.name[..])?;
     fail_if!(
         lead.signature_type() != 5,
         "unsupported signature type {}",

@@ -1,7 +1,7 @@
 //! Functions for parsing RPM immutable headers
 
 use super::super::ffi::{tag_class, tag_type, TagType};
-use super::super::{RPMLead, TagData};
+use super::super::{RPMLead, TagData, check_package_name};
 use super::{check_hex, load_header, u32_be_bytes, Header};
 use openpgp_parser;
 use openpgp_parser::AllowWeakHashes;
@@ -52,26 +52,50 @@ impl ImmutableHeader {
         Ok((ctx, digest))
     }
 
-    /// Retrieves the package lead
+    /// Retrieves the package Name-Epoch-Version-Release
+    pub fn nevr(&self) -> String {
+        let &Self {
+            ref name,
+            ref version,
+            ref release,
+            epoch,
+            ..
+        } = self;
+        match epoch {
+            Some(epoch) => format!("{}-{}:{}-{}", name, epoch, version, release),
+            None => format!("{}-{}-{}", name, version, release),
+        }
+    }
+
+    /// Retrieves the package Name-Epoch-Version-Release-Arch
+    pub fn nevra(&self) -> String {
+        let &Self {
+            ref name,
+            ref version,
+            ref release,
+            epoch,
+            ref arch,
+            ..
+        } = self;
+        match epoch {
+            Some(epoch) => format!("{}-{}:{}-{}.{}", name, epoch, version, release, arch),
+            None => format!("{}-{}-{}.{}", name, version, release, arch),
+        }
+    }
+
     pub fn lead(&self) -> [u8; 96] {
         let (osnum, archnum) = (
             os_to_osnum(self.os.as_bytes()).unwrap_or(0),
             arch_to_archnum(self.arch.as_bytes()).unwrap_or(0),
         );
-        let &Self {
-            ref name,
-            ref version,
-            ref release,
-            source,
-            epoch,
-            ..
-        } = self;
-        let full_name = match epoch {
-            Some(epoch) => format!("{}-{}:{}-{}", name, epoch, version, release),
-            None => format!("{}-{}-{}", name, version, release),
-        };
-        RPMLead::new(source, archnum, osnum, full_name.as_bytes()).as_slice()
+        RPMLead::new(self.source, archnum, osnum, self.nevr().as_bytes()).as_slice()
     }
+}
+
+fn extract_name(buf: &[u8]) -> Result<String> {
+    check_package_name(buf)?;
+    let res = String::from_utf8(buf[..buf.len() - 1].to_vec());
+    Ok(res.expect("String header checked to be valid UTF-8"))
 }
 
 pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader> {
@@ -142,26 +166,11 @@ pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader>
                     }
                 }
                 // package name
-                1000 => {
-                    name = Some(
-                        String::from_utf8(body[..body.len() - 1].to_vec())
-                            .expect("String header checked to be valid UTF-8"),
-                    )
-                }
+                1000 => name = Some(extract_name(body)?),
                 // package version
-                1001 => {
-                    version = Some(
-                        String::from_utf8(body[..body.len() - 1].to_vec())
-                            .expect("String header checked to be valid UTF-8"),
-                    )
-                }
+                1001 => version = Some(extract_name(body)?),
                 // package release
-                1002 => {
-                    release = Some(
-                        String::from_utf8(body[..body.len() - 1].to_vec())
-                            .expect("String header checked to be valid UTF-8"),
-                    )
-                }
+                1002 => release = Some(extract_name(body)?),
                 // package epoch
                 1003 => {
                     fail_if!(body.len() != 4, "wrong length");
@@ -170,19 +179,9 @@ pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader>
                     epoch = Some(epoch_ as u32)
                 }
                 // package os
-                1021 => {
-                    os = Some(
-                        String::from_utf8(body[..body.len() - 1].to_vec())
-                            .expect("String header checked to be valid UTF-8"),
-                    )
-                }
+                1021 => os = Some(extract_name(body)?),
                 // package architecture
-                1022 => {
-                    arch = Some(
-                        String::from_utf8(body[..body.len() - 1].to_vec())
-                            .expect("String header checked to be valid UTF-8"),
-                    )
-                }
+                1022 => arch = Some(extract_name(body)?),
                 // source RPM package built from
                 1044 => source = false,
                 _ => {}
