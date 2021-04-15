@@ -108,33 +108,33 @@ pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
 mod tests {
     use super::*;
     #[test]
-    #[should_panic = "not an RPM package"]
+    #[should_panic(expected = "not an RPM package")]
     fn rejects_bad_magic() {
         read_lead(&mut &[0u8; 96][..]).unwrap();
     }
     #[test]
-    #[should_panic = "unsupported RPM package version 5"]
+    #[should_panic(expected = "\"unsupported RPM package version 5.0\"")]
     fn rejects_bad_version() {
         let mut s = [0u8; 96];
         s[..5].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 5]);
         read_lead(&mut &s[..]).unwrap();
     }
     #[test]
-    #[should_panic = "{ kind: InvalidData, error: \"unknown package type 3\" }"]
+    #[should_panic(expected = "\"unknown package type 3\"")]
     fn rejects_non_zeroed_reserved() {
         let mut s = [0u8; 96];
         s[..8].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 3]);
         read_lead(&mut &s[..]).unwrap();
     }
     #[test]
-    #[should_panic = "{ kind: InvalidData, error: \"invalid package name"]
+    #[should_panic(expected = "\"invalid package name\"")]
     fn rejects_non_utf8_name() {
         let mut s = [0xFFu8; 96];
         s[..8].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0]);
         read_lead(&mut &s[..]).unwrap();
     }
     #[test]
-    #[should_panic = "{ kind: InvalidData, error: \"invalid package name"]
+    #[should_panic(expected = "\"invalid package name\"")]
     fn rejects_invalid_char_name() {
         let mut s = [0xFFu8; 96];
         s[..8].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0]);
@@ -144,7 +144,7 @@ mod tests {
         read_lead(&mut &s[..]).unwrap();
     }
     #[test]
-    #[should_panic = "{ kind: InvalidData, error: \"unsupported signature type 0\" }"]
+    #[should_panic(expected = "\"unsupported signature type 0\"")]
     fn rejects_wrong_signature_version() {
         let mut s = [0x0u8; 96];
         s[..8].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0]);
@@ -153,7 +153,7 @@ mod tests {
         read_lead(&mut &s[..]).unwrap();
     }
     #[test]
-    #[should_panic = "{ kind: InvalidData, error: \"reserved bytes not zeroed\" }"]
+    #[should_panic(expected = "\"reserved bytes not zeroed\"")]
     fn rejects_bad_padding() {
         let mut s = [0x0u8; 96];
         s[..8].copy_from_slice(&[0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0]);

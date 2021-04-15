@@ -1,5 +1,4 @@
 //! Utility functions for parsing OpenPGP packets
-#![allow(ellipsis_inclusive_range_patterns)]
 
 use super::{Error, Reader};
 

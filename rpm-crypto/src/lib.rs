@@ -5,8 +5,6 @@
 //! code.
 
 #![forbid(improper_ctypes)]
-#![feature(const_fn)]
-// #![deny(warnings)]
 
 use openpgp_parser::{AllowWeakHashes, Error};
 extern crate openpgp_parser;
@@ -29,8 +27,10 @@ mod init {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct InitToken(());
     pub fn init() -> InitToken {
-        use std::sync::Once;
-        static RPM_CRYPTO_INIT_ONCE: Once = Once::new();
+        #[allow(deprecated)] // we need to support old Rust
+        use std::sync::{Once, ONCE_INIT};
+        #[allow(deprecated)] // we need to support old Rust
+        static RPM_CRYPTO_INIT_ONCE: Once = ONCE_INIT;
         use std::os::raw::{c_char, c_int};
         use std::ptr;
         #[link(name = "rpm")]

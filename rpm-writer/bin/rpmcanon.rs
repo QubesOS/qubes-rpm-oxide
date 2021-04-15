@@ -1,5 +1,16 @@
 #![feature(rustc_private)] // hack hack
 #![feature(libc)]
+
+#![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
+#![cfg_attr(ellipsis_inclusive_range_deprecated, allow(ellipsis_inclusive_range_patterns))]
+#![cfg_attr(const_fn_unstable, feature(const_fn))]
+
+#[cfg(any(not(any(const_fn_stable, const_fn_unstable)),
+          not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
+          not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
+          not(any(try_from_stable, try_from_unstable))))]
+compile_error!("build script bug");
+
 extern crate libc;
 extern crate openpgp_parser;
 extern crate rpm_crypto;

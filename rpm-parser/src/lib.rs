@@ -7,9 +7,17 @@
 //! features can be found in the `rpm` crate, which uses the system RPM library.
 
 // #![deny(warnings)]
-#![feature(i128_type)]
-#![feature(try_from)]
-#![feature(const_fn)]
+#![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
+#![cfg_attr(ellipsis_inclusive_range_deprecated, allow(ellipsis_inclusive_range_patterns))]
+#![cfg_attr(const_fn_unstable, feature(const_fn))]
+#![cfg_attr(try_from_unstable, feature(try_from))]
+
+#[cfg(any(not(any(const_fn_stable, const_fn_unstable)),
+          not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
+          not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
+          not(any(try_from_stable, try_from_unstable))))]
+compile_error!("build script bug");
+
 macro_rules! size_of {
     ($t:ty) => {
         $crate::std::mem::size_of::<$t>()
