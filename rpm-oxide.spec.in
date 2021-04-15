@@ -26,6 +26,7 @@ URL:		https://www.qubes-os.org
 BuildRequires:  rust
 BuildRequires:  cargo
 BuildRequires:  rpm-devel
+BuildRequires:  rust-debugger-common
 
 Requires:       rpm >= 4.14.2.1-4
 
