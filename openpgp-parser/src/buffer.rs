@@ -49,7 +49,7 @@ macro_rules! gen_le {
             let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
             let mut res: $t = 0;
             for i in 0..size_of::<$t>() {
-                res = res << 8 | data[size_of::<$i>() - 1 - i] as $t
+                res = res << 8 | untrusted_buffer[size_of::<$t>() - 1 - i] as $t
             }
             Ok(res)
         }
@@ -77,9 +77,10 @@ macro_rules! gen_le_offset {
         #[inline]
         pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
             let range = offset..offset.wrapping_add(size_of::<$t>());
-            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?.try_into();
+            let data = self.untrusted_buffer.get(range).ok_or(EOFError)?;
+            let mut res: $t = 0;
             for i in 0..size_of::<$t>() {
-                res = res << 8 | data[size_of::<$i>() - 1 - i] as $t
+                res = res << 8 | data[size_of::<$t>() - 1 - i] as $t
             }
             Ok(res)
         }
@@ -168,7 +169,6 @@ impl<'a> Reader<'a> {
         self.untrusted_buffer
     }
 
-    #[cfg(any())]
     gen_le! {
         /// Gets a little-endian `u16` value
         ///
@@ -239,7 +239,6 @@ impl<'a> Reader<'a> {
         (be_u64, u64)
     }
 
-    #[cfg(any())]
     gen_le_offset! {
         /// Gets a little-endian `u16` value
         ///
