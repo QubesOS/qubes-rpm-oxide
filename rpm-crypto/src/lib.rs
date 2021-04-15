@@ -37,6 +37,7 @@ mod init {
         extern "C" {
             fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
         }
+        // Safety: the C function is called correctly.
         RPM_CRYPTO_INIT_ONCE
             .call_once(|| assert_eq!(unsafe { rpmReadConfigFiles(ptr::null(), ptr::null()) }, 0));
         InitToken(())

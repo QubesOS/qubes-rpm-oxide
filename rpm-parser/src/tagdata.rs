@@ -29,7 +29,8 @@ impl TagData {
         let _: [u8; 16] = [0u8; size_of!(Self)];
         let _: [u8; 4] = [0u8; size_of!(u32)];
         let _: [u8; align_of!(u32)] = [0u8; align_of!(Self)];
-        // we now know that `TagData` cannot have any padding
+        // SAFETY: we know that `TagData` cannot have any padding.  Since it has no padding, and
+        // all bit patterns are valid for `u32`, all bit patterns are valid for `TagData` as well.
         unsafe {
             std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * size_of!(Self))
         }
@@ -51,12 +52,21 @@ impl TagData {
         let _: [u8; 16] = [0u8; size_of!(Self)];
         let _: [u8; 4] = [0u8; size_of!(u32)];
         let _: [u8; align_of!(u32)] = [0u8; align_of!(Self)];
-        // we now know that `TagData` cannot have any padding
         unsafe {
-            std::slice::from_raw_parts_mut(
-                slice.as_mut_ptr() as *mut u8,
-                slice.len() * size_of!(Self),
-            )
+            let (ptr, len) = (slice.as_mut_ptr(), slice.len());
+            // Forget `slice`, to avoid aliasing mutable references.
+            std::mem::forget(slice);
+            // SAFETY: we know that `TagData` cannot have any padding.  Since it
+            // has no padding, and all bit patterns are valid for `u32`, all bit
+            // patterns are valid for `TagData` as well.  Furthermore, since
+            // `slice` is a unique reference, we know it was the only reference
+            // to the data it points to.  We just ended its lifetime with
+            // `std::mem::forget`, so now there are *no* references to that
+            // data.  Therefore, the slice we produce will be the only reference
+            // to the data, as required.  The multiplication cannot overflow
+            // because a mutable slice cannot point to more than SIZE_MAX/2
+            // bytes.
+            std::slice::from_raw_parts_mut(ptr as *mut u8, len * size_of!(Self))
         }
     }
 }

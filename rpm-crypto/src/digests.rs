@@ -10,6 +10,7 @@ enum ExternDigestCtx {}
 pub struct DigestCtx(*mut ExternDigestCtx);
 
 pub fn rpm_hash_len(alg: i32) -> usize {
+    // SAFETY: this code is called correctly (and has 100% input coverage in the testsuite)
     unsafe { rpmDigestLength(alg) }
 }
 
@@ -34,12 +35,14 @@ extern "C" {
 
 impl Drop for DigestCtx {
     fn drop(&mut self) {
+        // SAFETY: `self.0` is a pointer to an RPM digest context.
         unsafe { rpmDigestFinal(self.0, None, None, 0) };
     }
 }
 
 impl Clone for DigestCtx {
     fn clone(&self) -> Self {
+        // SAFETY: `self.0` is a pointer to an RPM digest context.
         unsafe { rpmDigestDup(self.0) }
     }
 }
@@ -67,12 +70,15 @@ impl DigestCtx {
         if rpm_hash_len(algorithm as _) != len as _ {
             return Err(());
         }
+        // SAFETY: `rpmDigestInit` is safe for all inputs.
         let raw_p = unsafe { rpmDigestInit(algorithm.into(), 0) };
         assert!(!raw_p.0.is_null());
         Ok(raw_p)
     }
 
     pub fn update(&mut self, buf: &[u8]) {
+        // SAFETY: `self.0` is a pointer to an RPM digest context, and
+        // `buf.as_ptr()` points to `buf.len()` bytes of valid memory.
         unsafe { assert_eq!(rpmDigestUpdate(self.0, buf.as_ptr() as _, buf.len()), 0) }
     }
 
@@ -84,12 +90,19 @@ impl DigestCtx {
         let mut len = 0;
         unsafe {
             assert_eq!(
+                // SAFETY: we just forgot `self`, so the destructor will not
+                // free the memory.
                 rpmDigestFinal(this, Some(&mut p), Some(&mut len), ascii as _),
                 0
             );
+            assert!(!p.is_null());
+            assert_eq!(len & 1, ascii as _);
             let mut retval: Vec<u8> = Vec::with_capacity(len);
+            // SAFETY: both `p` and `retval.as_mut_ptr()` are freshly allocated heap pointers.
             ptr::copy_nonoverlapping(p as *const u8, retval.as_mut_ptr(), len);
+            // SAFETY: we just initialized the vector.
             retval.set_len(len);
+            // SAFETY: rpmDigestFinal() allocates the memory with `malloc`
             free(p);
             retval
         }
@@ -104,7 +117,7 @@ mod tests {
         use openpgp_parser::signature::check_hash_algorithm;
         for &i in &[8, 9, 10] {
             assert_eq!(
-                unsafe { rpmDigestLength(i) },
+                super::rpm_hash_len(i),
                 check_hash_algorithm(i, AllowWeakHashes::No).unwrap() as usize
             );
         }
@@ -125,6 +138,14 @@ mod tests {
                 std::str::from_utf8(&hex[..len - 1]).unwrap()
             );
             println!("{:?}", s.finalize(false))
+        }
+    }
+    #[test]
+    #[ignore]
+    fn rpm_hash_len() {
+        for i in i32::min_value()..i32::max_value() {
+            let r = super::rpm_hash_len(i);
+            assert!(r == usize::max_value() || r < 100);
         }
     }
 }
