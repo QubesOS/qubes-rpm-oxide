@@ -42,7 +42,7 @@ RUSTFLAGS='-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now' RUSTC_BOOTSTRAP=1 cargo bui
 %install
 install -D -m 0755 -- target/release/rpmcanon "$RPM_BUILD_ROOT"/%_bindir/rpmcanon
 %check
-RUSTC_BOOTSTRAP=1 cargo test --all-features --release
+RUSTC_BOOTSTRAP=1 cargo test --all-features --release -- --test-threads=1
 %clean
 rm -rf "$RPM_BUILD_ROOT" '%{name}-%{version}'
 %files
