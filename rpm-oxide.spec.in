@@ -46,7 +46,6 @@ RUSTC_BOOTSTRAP=1 cargo test --all-features --release -- --test-threads=1
 %clean
 rm -rf "$RPM_BUILD_ROOT" '%{name}-%{version}'
 %files
-%attr(755,root,root) %dir /usr/bin
 %attr(755,root,root) /usr/bin/rpmcanon
 %changelog
 @CHANGELOG@
