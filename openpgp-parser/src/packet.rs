@@ -95,42 +95,79 @@ impl<'a> Packet<'a> {
         }
     }
 
-    /// Wraps the packet in v4 encapsulation
+    /// Wraps the packet in OpenPGP encapsulation
     #[cfg(feature = "alloc")]
     pub fn serialize(&self) -> Vec<u8> {
-        let tag_byte = self.tag | 0b1100_0000u8;
         let len = self.buffer.len();
-        match len {
-            0...191 => {
-                // 1-byte
-                let mut v = Vec::with_capacity(2 + len);
-                v.push(tag_byte);
-                v.push(len as u8);
-                v.extend_from_slice(self.buffer);
-                v
+        assert!(u64::from(u32::max_value()) >= len as u64);
+        if self.tag >= 16 {
+            let tag_byte = self.tag | 0b1100_0000u8;
+            match len {
+                0...191 => {
+                    // 1-byte
+                    let mut v = Vec::with_capacity(2 + len);
+                    v.push(tag_byte);
+                    v.push(len as u8);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
+                192...8383 => {
+                    // 2-byte
+                    let mut v = Vec::with_capacity(3 + len);
+                    let len = len - 192;
+                    v.push(tag_byte);
+                    v.push((len >> 8) as u8 + 192);
+                    v.push(len as u8);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
+                _ => {
+                    // 5-byte
+                    let mut v = Vec::with_capacity(6 + len);
+                    v.push(tag_byte);
+                    v.extend_from_slice(&[
+                        (len >> 24) as u8,
+                        (len >> 16) as u8,
+                        (len >> 8) as u8,
+                        len as u8,
+                    ]);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
             }
-            192...8383 => {
-                // 2-byte
-                let mut v = Vec::with_capacity(3 + len);
-                let len = len - 192;
-                v.push(tag_byte);
-                v.push((len >> 8) as u8 + 192);
-                v.push(len as u8);
-                v.extend_from_slice(self.buffer);
-                v
-            }
-            _ => {
-                // 5-byte
-                let mut v = Vec::with_capacity(6 + len);
-                v.push(tag_byte);
-                v.extend_from_slice(&[
-                    (len >> 24) as u8,
-                    (len >> 16) as u8,
-                    (len >> 8) as u8,
-                    len as u8,
-                ]);
-                v.extend_from_slice(self.buffer);
-                v
+        } else {
+            let mut tag_byte = self.tag << 2 | 0b1000_0000u8;
+            match len {
+                0...0xFF => {
+                    // 1-byte
+                    let mut v = Vec::with_capacity(2 + len);
+                    v.push(tag_byte | 0b00);
+                    v.push(len as u8);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
+                0x100...0xFFFF => {
+                    // 2-byte
+                    let mut v = Vec::with_capacity(3 + len);
+                    v.push(tag_byte | 0b01);
+                    v.push((len >> 8) as u8);
+                    v.push(len as u8);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
+                _ => {
+                    // 5-byte
+                    let mut v = Vec::with_capacity(5 + len);
+                    v.push(tag_byte | 0b10);
+                    v.extend_from_slice(&[
+                        (len >> 24) as u8,
+                        (len >> 16) as u8,
+                        (len >> 8) as u8,
+                        len as u8,
+                    ]);
+                    v.extend_from_slice(self.buffer);
+                    v
+                }
             }
         }
     }
