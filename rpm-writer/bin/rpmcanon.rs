@@ -66,7 +66,8 @@ fn emit_header(
         ref header_payload_sig,
         ref header_sig,
         ref main_header_bytes,
-        ref main_header_hash,
+        ref main_header_sha1_hash,
+        ref main_header_sha256_hash,
         ref header_payload_weak_digest,
     }: &rpm_parser::VerifyResult,
     mut dest: Option<&mut std::io::Write>,
@@ -79,7 +80,13 @@ fn emit_header(
     hdr.push(
         RPMSIGTAG_SHA1HEADER,
         HeaderEntry::String(
-            CStr::from_bytes_with_nul(&main_header_hash).expect("RPM NUL-terminates its hex data"),
+            CStr::from_bytes_with_nul(&main_header_sha1_hash).expect("RPM NUL-terminates its hex data"),
+        ),
+    );
+    hdr.push(
+        RPMSIGTAG_SHA256HEADER,
+        HeaderEntry::String(
+            CStr::from_bytes_with_nul(&main_header_sha256_hash).expect("RPM NUL-terminates its hex data"),
         ),
     );
     hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*header_sig));

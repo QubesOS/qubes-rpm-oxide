@@ -23,8 +23,10 @@ pub struct VerifyResult {
     pub header_sig: Vec<u8>,
     /// The bytes of the main header
     pub main_header_bytes: Vec<u8>,
+    /// The SHA1 hash of the main header, hex-encoded with a trailing NUL
+    pub main_header_sha1_hash: Vec<u8>,
     /// The SHA256 hash of the main header, hex-encoded with a trailing NUL
-    pub main_header_hash: Vec<u8>,
+    pub main_header_sha256_hash: Vec<u8>,
     /// The MD5 header+payload digest (yuck!).  Will only be [`Some`] for old
     /// packages with no payload digests.
     pub header_payload_weak_digest: Option<Vec<u8>>,
@@ -87,7 +89,13 @@ pub fn verify_package(
         src.read_exact(&mut main_header_bytes[16..])?;
         main_header_bytes
     };
-    let main_header_hash = {
+    let main_header_sha256_hash = {
+        let mut main_header_hash = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
+            .expect("SHA-256 is supported");
+        main_header_hash.update(&main_header_bytes);
+        main_header_hash.finalize(true)
+    };
+    let main_header_sha1_hash = {
         let mut main_header_hash = DigestCtx::init(2, openpgp_parser::AllowWeakHashes::Yes, token)
             .expect("SHA-1 is supported");
         main_header_hash.update(&main_header_bytes);
@@ -156,7 +164,8 @@ pub fn verify_package(
         header_payload_sig,
         header_sig,
         main_header_bytes,
-        main_header_hash,
+        main_header_sha1_hash,
+        main_header_sha256_hash,
         header_payload_weak_digest,
     };
     if let Some(ref mut cb) = cb {
