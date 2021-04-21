@@ -136,7 +136,7 @@ impl<'a> Packet<'a> {
                 }
             }
         } else {
-            let mut tag_byte = self.tag << 2 | 0b1000_0000u8;
+            let tag_byte = self.tag << 2 | 0b1000_0000u8;
             match len {
                 0...0xFF => {
                     // 1-byte
