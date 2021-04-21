@@ -99,7 +99,38 @@ impl<'a> HeaderEntry<'a> {
                 }
                 Ok(())
             }
-            _ => unimplemented!(),
+            &HeaderEntry::U16(e) => {
+                let mut v = Vec::with_capacity(2 * e.len());
+                for &i in e {
+                    v.push((i >> 8) as u8);
+                    v.push(i as u8);
+                }
+                w.write_all(&v)
+            }
+            &HeaderEntry::U32(e) => {
+                let mut v = Vec::with_capacity(4 * e.len());
+                for &i in e {
+                    v.push((i >> 24) as u8);
+                    v.push((i >> 16) as u8);
+                    v.push((i >> 8) as u8);
+                    v.push(i as u8);
+                }
+                w.write_all(&v)
+            }
+            &HeaderEntry::U64(e) => {
+                let mut v = Vec::with_capacity(8 * e.len());
+                for &i in e {
+                    v.push((i >> 56) as u8);
+                    v.push((i >> 48) as u8);
+                    v.push((i >> 40) as u8);
+                    v.push((i >> 32) as u8);
+                    v.push((i >> 24) as u8);
+                    v.push((i >> 16) as u8);
+                    v.push((i >> 8) as u8);
+                    v.push(i as u8);
+                }
+                w.write_all(&v)
+            }
         }
     }
     pub fn count(&self) -> usize {
