@@ -88,8 +88,8 @@ pub fn verify_package(
         main_header_bytes
     };
     let main_header_hash = {
-        let mut main_header_hash = DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No, token)
-            .expect("SHA-256 is supported");
+        let mut main_header_hash = DigestCtx::init(2, openpgp_parser::AllowWeakHashes::Yes, token)
+            .expect("SHA-1 is supported");
         main_header_hash.update(&main_header_bytes);
         main_header_hash.finalize(true)
     };

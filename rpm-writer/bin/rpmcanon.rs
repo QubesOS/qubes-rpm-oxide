@@ -37,6 +37,7 @@ fn errno() -> std::os::raw::c_int {
 }
 
 const RPMTAG_SIG_BASE: u32 = 256;
+const RPMSIGTAG_SHA1HEADER: u32 = RPMTAG_SIG_BASE + 13;
 const RPMSIGTAG_SHA256HEADER: u32 = RPMTAG_SIG_BASE + 17;
 const RPMSIGTAG_RSAHEADER: u32 = RPMTAG_SIG_BASE + 12;
 const RPMSIGTAG_PGP: u32 = 1002;
@@ -76,7 +77,7 @@ fn emit_header(
     let magic_offset = 96;
     let mut hdr = HeaderBuilder::new(rpm_writer::HeaderKind::Signature);
     hdr.push(
-        RPMSIGTAG_SHA256HEADER,
+        RPMSIGTAG_SHA1HEADER,
         HeaderEntry::String(
             CStr::from_bytes_with_nul(&main_header_hash).expect("RPM NUL-terminates its hex data"),
         ),
