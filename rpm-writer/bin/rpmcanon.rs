@@ -263,7 +263,6 @@ fn inner_main() -> i32 {
     let mut args = std::env::args_os().into_iter();
     let mut allow_weak_hashes = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
-    let mut directory = false;
     let mut preserve_old_signature = false;
     let _ = match args.next() {
         Some(s) => s,
@@ -273,7 +272,6 @@ fn inner_main() -> i32 {
         match i.as_bytes() {
             b"--allow-weak-hashes" => allow_weak_hashes = AllowWeakHashes::Yes,
             b"--help" => return usage(true),
-            b"--directory" => directory = true,
             b"--allow-old-pkgs" => allow_old_pkgs = true,
             b"--preserve-old-signature" => preserve_old_signature = true,
             b"--" => break,
@@ -286,9 +284,6 @@ fn inner_main() -> i32 {
     }
     let (src, dst) = (args[0].clone(), args[1].clone());
     let tx = RpmTransactionSet::new(token);
-    if directory {
-        unimplemented!()
-    }
     match process_file(
         &tx,
         &src,
