@@ -89,6 +89,8 @@ fn emit_header(
     if let &Some(ref weak_digest) = header_payload_weak_digest {
         hdr.push(RPMSIGTAG_MD5, HeaderEntry::Bin(weak_digest));
     }
+    hdr.push(1007, HeaderEntry::U32(&[0]));
+    hdr.push(1000, HeaderEntry::U32(&[0]));
     let mut out_data = vec![0; magic_offset];
     out_data[..magic_offset].copy_from_slice(&main_header.lead());
     hdr.emit(&mut out_data).expect("writes to a vec never fail");
