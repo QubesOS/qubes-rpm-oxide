@@ -1,15 +1,15 @@
 [package]
 name = "rpm-writer"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Demi Marie Obenour <demi@invisiblethingslab.com>"]
 # edition = "2018"
 license = "MIT OR Apache-2.0"
 build = "../rpm-parser/build.rs"
 
 [dependencies]
-rpm-parser = { version = "0.1.0", path = "../rpm-parser" }
-rpm-crypto = { version = "0.1.0", path = "../rpm-crypto", optional = true }
-openpgp-parser = { version = "0.1.0", path = "../openpgp-parser", optional = true }
+rpm-parser = { version = "0.2.0", path = "../rpm-parser" }
+rpm-crypto = { version = "0.2.0", path = "../rpm-crypto", optional = true }
+openpgp-parser = { version = "0.2.0", path = "../openpgp-parser", optional = true }
 
 [features]
 bin = ["openpgp-parser", "rpm-crypto"]
