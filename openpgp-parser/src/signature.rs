@@ -393,8 +393,8 @@ mod tests {
     use super::*;
     #[test]
     fn parses_real_world_sig() {
-        static EDDSA_SIG: &'static [u8] = include_bytes!("../../eddsa.asc");
-        static TRAILING_JUNK: &'static [u8] = include_bytes!("../../trailing-junk.asc");
+        static EDDSA_SIG: &'static [u8] = include_bytes!("../../data/eddsa.asc");
+        static TRAILING_JUNK: &'static [u8] = include_bytes!("../../data/trailing-junk.asc");
         assert_eq!(TRAILING_JUNK.len(), EDDSA_SIG.len() + 1);
         assert_eq!(
             Reader::read_all(TRAILING_JUNK, Error::TrailingJunk, |r| read_signature(

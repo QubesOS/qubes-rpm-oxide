@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn parses_lua_rpm() {
         let token = rpm_crypto::init();
-        const S: &[u8] = include_bytes!("../../../lua-5.4.2-1.fc33.x86_64.rpm");
+        const S: &[u8] = include_bytes!("../../../data/lua-5.4.2-1.fc33.x86_64.rpm");
         let mut r = &S[96..];
         let SignatureHeader {
             header: _,
