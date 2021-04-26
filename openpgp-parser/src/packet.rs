@@ -100,7 +100,7 @@ impl<'a> Packet<'a> {
     pub fn serialize(&self) -> Vec<u8> {
         let len = self.buffer.len();
         assert!(u64::from(u32::max_value()) >= len as u64);
-        if self.tag >= 16 {
+        if self.tag() >= 16 {
             let tag_byte = self.tag | 0b1100_0000u8;
             match len {
                 0...191 => {
@@ -136,7 +136,7 @@ impl<'a> Packet<'a> {
                 }
             }
         } else {
-            let tag_byte = self.tag << 2 | 0b1000_0000u8;
+            let tag_byte = self.tag() << 2 | 0b1000_0000u8;
             match len {
                 0...0xFF => {
                     // 1-byte
@@ -170,5 +170,21 @@ impl<'a> Packet<'a> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(feature = "alloc")]
+    fn serialize(tag: u8, buffer: &[u8]) -> Vec<u8> {
+        Packet { tag, buffer }.serialize()
+    }
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn check_packet_serialization_short() {
+        assert_eq!(serialize(0x4F, &[][..]), vec![0b1011_1100, 0x0]);
+        assert_eq!(serialize(0x7, &[b'a'][..]), vec![0b1001_1100, 0x1, b'a']);
+        assert_eq!(serialize(0x10, &[b'a'][..]), vec![0b1101_0000, 0x1, b'a']);
     }
 }
