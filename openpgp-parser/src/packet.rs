@@ -45,8 +45,6 @@ pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
         Some(e) => e,
         None => return Ok(None),
     };
-    #[cfg(test)]
-    eprintln!("Tag byte is 0b{:b}", tagbyte);
     let packet = if tagbyte & 0x40 == 0 {
         let lenlen = 1u8 << (tagbyte & 0b11);
         // We deliberately do not support indefinite-length packets.
@@ -64,11 +62,11 @@ pub fn next<'a>(reader: &mut Reader<'a>) -> Result<Option<Packet<'a>>, Error> {
     } else {
         let buffer = get_varlen_bytes(reader)?;
         Packet {
-            tag: tagbyte & 0x7F,
+            tag: tagbyte & 0x3F,
             buffer,
         }
     };
-    if packet.tag & 0x3F != 0 {
+    if packet.tag != 0 {
         Ok(Some(packet))
     } else {
         Err(Error::BadTag)
@@ -86,105 +84,81 @@ impl<'a> Packet<'a> {
         self.buffer
     }
 
-    /// Retrieves the packet’s format
-    pub fn format(&self) -> Format {
-        if self.tag & 0x40 == 0 {
-            Format::Old
-        } else {
-            Format::New
-        }
-    }
-
     /// Wraps the packet in OpenPGP encapsulation
     #[cfg(feature = "alloc")]
     pub fn serialize(&self) -> Vec<u8> {
         let len = self.buffer.len();
         assert!(u64::from(u32::max_value()) >= len as u64);
-        if self.tag() >= 16 {
-            let tag_byte = self.tag | 0b1100_0000u8;
-            match len {
-                0...191 => {
-                    // 1-byte
-                    let mut v = Vec::with_capacity(2 + len);
-                    v.push(tag_byte);
-                    v.push(len as u8);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
-                192...8383 => {
-                    // 2-byte
-                    let mut v = Vec::with_capacity(3 + len);
-                    let len = len - 192;
-                    v.push(tag_byte);
-                    v.push((len >> 8) as u8 + 192);
-                    v.push(len as u8);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
-                _ => {
-                    // 5-byte
-                    let mut v = Vec::with_capacity(6 + len);
-                    v.push(tag_byte);
-                    v.extend_from_slice(&[
-                        (len >> 24) as u8,
-                        (len >> 16) as u8,
-                        (len >> 8) as u8,
-                        len as u8,
-                    ]);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
+        let tag_byte = self.tag | 0b1100_0000u8;
+        let mut v = match len {
+            0...191 => {
+                // 1-byte
+                let mut v = Vec::with_capacity(2 + len);
+                v.push(tag_byte);
+                v.push(len as u8);
+                v
             }
-        } else {
-            let tag_byte = self.tag() << 2 | 0b1000_0000u8;
-            match len {
-                0...0xFF => {
-                    // 1-byte
-                    let mut v = Vec::with_capacity(2 + len);
-                    v.push(tag_byte | 0b00);
-                    v.push(len as u8);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
-                0x100...0xFFFF => {
-                    // 2-byte
-                    let mut v = Vec::with_capacity(3 + len);
-                    v.push(tag_byte | 0b01);
-                    v.push((len >> 8) as u8);
-                    v.push(len as u8);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
-                _ => {
-                    // 5-byte
-                    let mut v = Vec::with_capacity(5 + len);
-                    v.push(tag_byte | 0b10);
-                    v.extend_from_slice(&[
-                        (len >> 24) as u8,
-                        (len >> 16) as u8,
-                        (len >> 8) as u8,
-                        len as u8,
-                    ]);
-                    v.extend_from_slice(self.buffer);
-                    v
-                }
+            192...8383 => {
+                // 2-byte
+                let mut v = Vec::with_capacity(3 + len);
+                let len = len - 192;
+                v.push(tag_byte);
+                v.push((len >> 8) as u8 + 192);
+                v.push(len as u8);
+                v
             }
-        }
+            _ => {
+                // 5-byte
+                let mut v = Vec::with_capacity(6 + len);
+                v.extend_from_slice(&[
+                    tag_byte,
+                    0xFF,
+                    (len >> 24) as u8,
+                    (len >> 16) as u8,
+                    (len >> 8) as u8,
+                    len as u8,
+                ]);
+                v
+            }
+        };
+        v.extend_from_slice(self.buffer);
+        v
     }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "alloc", test))]
 mod tests {
     use super::*;
-    #[cfg(feature = "alloc")]
     fn serialize(tag: u8, buffer: &[u8]) -> Vec<u8> {
         Packet { tag, buffer }.serialize()
     }
-    #[cfg(feature = "alloc")]
     #[test]
     fn check_packet_serialization_short() {
-        assert_eq!(serialize(0x4F, &[][..]), vec![0b1011_1100, 0x0]);
-        assert_eq!(serialize(0x7, &[b'a'][..]), vec![0b1001_1100, 0x1, b'a']);
+        assert_eq!(serialize(0x4F, &[][..]), vec![0b1100_1111, 0x0]);
+        assert_eq!(serialize(0x7, &[b'a'][..]), vec![0b1100_0111, 0x1, b'a']);
         assert_eq!(serialize(0x10, &[b'a'][..]), vec![0b1101_0000, 0x1, b'a']);
+    }
+    #[test]
+    fn check_packet_serialization() {
+        let buffer = vec![0u8; 65536];
+        for tag in 1..64 {
+            for j in 0..buffer.len() {
+                let serialized = Packet {
+                    tag,
+                    buffer: &buffer[..j],
+                }
+                .serialize();
+                assert_eq!(serialized[0] & 0b1100_0000, 0b1100_0000);
+                assert_eq!(serialized[0] & 0b0011_1111, tag);
+                let mut reader = Reader::new(&serialized);
+                let Packet {
+                    tag: deserialized_tag,
+                    buffer: deserialized_buffer,
+                } = next(&mut reader).unwrap().unwrap();
+                assert_eq!(reader.len(), 0);
+                assert_eq!(tag, deserialized_tag);
+                assert_eq!(&buffer[..j], deserialized_buffer);
+            }
+        }
     }
 }
