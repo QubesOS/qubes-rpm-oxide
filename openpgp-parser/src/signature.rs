@@ -117,7 +117,7 @@ pub fn pkey_alg_mpis(alg: u8, sig_version: u8) -> Result<u8, Error> {
 }
 
 /// Checks that a hash algorithm is secure; if it is, returns the length (in bytes) of the hash it
-/// generates.  If `allow_weak_hashes` is set, also allow SHA1 and SHA224.
+/// generates.  If `allow_weak_hashes` is set, also allow MD5, SHA1, and SHA224.
 pub fn check_hash_algorithm(hash: i32, allow_weak_hashes: AllowWeakHashes) -> Result<u16, Error> {
     match hash {
         // Okay hash algorithms
