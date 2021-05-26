@@ -367,7 +367,7 @@ fn parse_packet_body<'a>(
                 }
             }
         }
-        _ => return Err(Error::IllFormedSignature),
+        _ => return Err(Error::UnsupportedSignatureVersion),
     }
     let mpis = pkey_alg_mpis(pkey_alg, version)?;
     check_hash_algorithm(hash_alg.into(), allow_weak_hashes)?;
@@ -450,6 +450,18 @@ mod tests {
                 assert_eq!(read_mpi(&mut buf).unwrap_err(), Error::BadMPI);
                 assert_eq!(buf.len(), 4);
             }
+        }
+    }
+    #[test]
+    fn wrong_signature_version() {
+        for i in 0u16..256 {
+            let i = i as u8;
+            let e = if i == 3 || i == 4 {
+                Error::PrematureEOF
+            } else {
+                Error::UnsupportedSignatureVersion
+            };
+            assert_eq!(parse_packet_body(&mut Reader::new(&[i]), 0, AllowWeakHashes::No).unwrap_err(), e);
         }
     }
 }
