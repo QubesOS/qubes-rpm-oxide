@@ -19,6 +19,10 @@ pub enum AllowWeakHashes {
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     reader.read(|reader| {
         let bits = 7 + reader.be_u16()? as usize;
+        if bits == 7 {
+            // Empty MPI is invalid
+            return Err(Error::BadMPI);
+        }
         let mpi_buf = reader.get_bytes(bits >> 3)?;
         // don’t use ‘Reader::byte’, which mutates the reader
         if let Some(first_byte) = mpi_buf.get(0) {
@@ -419,5 +423,33 @@ mod tests {
         assert_eq!(&sig.key_id[..], b"\x28\xA4\x5C\x93\xB0\xB5\xB6\xE0");
         assert_eq!(sig.creation_time, 1611626266);
         assert_eq!(sig.fingerprint.unwrap()[12..], sig.key_id[..]);
+    }
+    #[test]
+    fn mpi_too_short() {
+        let mut buf: Reader = Reader::new(b"\x00\x09\xFF");
+        assert_eq!(buf.len(), 3);
+        assert_eq!(read_mpi(&mut buf).unwrap_err(), Error::PrematureEOF);
+        assert_eq!(buf.len(), 3);
+    }
+    #[test]
+    fn mpi_invalid() {
+        for i in 0..255 {
+            let s = &[0, i, 0x7F, 0x00];
+            let mut buf: Reader = Reader::new(s);
+            assert_eq!(buf.len(), 4);
+            if i == 7 {
+                read_mpi(&mut buf).unwrap();
+                assert_eq!(buf.len(), 1);
+            } else if i == 15 {
+                read_mpi(&mut buf).unwrap();
+                assert_eq!(buf.len(), 0);
+            } else if i > 16 {
+                assert_eq!(read_mpi(&mut buf).unwrap_err(), Error::PrematureEOF);
+                assert_eq!(buf.len(), 4);
+            } else {
+                assert_eq!(read_mpi(&mut buf).unwrap_err(), Error::BadMPI);
+                assert_eq!(buf.len(), 4);
+            }
+        }
     }
 }
