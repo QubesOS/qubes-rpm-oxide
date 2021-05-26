@@ -370,6 +370,9 @@ fn parse_packet_body<'a>(
         _ => return Err(Error::UnsupportedSignatureVersion),
     }
     let mpis = pkey_alg_mpis(pkey_alg, version)?;
+    if i32::from(hash_alg) == OPENPGP_HASH_INSECURE_MD5 {
+        return Err(Error::InsecureAlgorithm(hash_alg.into()))
+    }
     check_hash_algorithm(hash_alg.into(), allow_weak_hashes)?;
     // Check the creation time
     let creation_time = match siginfo.creation_time {
