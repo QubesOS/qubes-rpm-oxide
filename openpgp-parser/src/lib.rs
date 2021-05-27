@@ -73,4 +73,11 @@ pub enum Error {
     NoCreationTime,
     /// Unsupported critical subpacket
     UnsupportedCriticalSubpacket(u8),
+    /// Wrong signature type
+    WrongSignatureType {
+        /// The expected signature type
+        expected_type: signature::SignatureType,
+        /// The actual signature type
+        actual_type: u8,
+    },
 }

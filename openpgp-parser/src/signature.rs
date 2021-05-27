@@ -14,6 +14,40 @@ pub enum AllowWeakHashes {
     Yes,
 }
 
+/// Signature types
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[repr(u8)]
+pub enum SignatureType {
+    /// Signature of a binary document
+    Binary = 0,
+    /// Signature of a text document with CRLF line endings
+    Text = 1,
+    /// Standalone
+    Standalone = 2,
+    /// Generic certification
+    GenericCert = 0x10,
+    /// Persona certification
+    PersonaCert = 0x11,
+    /// Casual certification
+    CasualCert = 0x12,
+    /// Positive certification
+    PositiveCert = 0x13,
+    /// Subkey binding
+    SubkeyBinding = 0x18,
+    /// Primary-key binding
+    PrimaryKeyBinding = 0x19,
+    /// Signature directly on a key
+    KeySig = 0x1F,
+    /// Primary key revocation
+    PrimaryKeyRevocation = 0x20,
+    /// Subkey revocation
+    SubkeyRevocation = 0x28,
+    /// Certification revocation
+    CertificationRevocatin = 0x30,
+    /// Timestamp
+    Timestamp = 0x40,
+}
+
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// slice.
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
@@ -36,8 +70,6 @@ pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
         Ok(mpi_buf)
     })
 }
-
-const OPENPGP_SIGNATURE_TYPE_BINARY: u8 = 0;
 
 const OPENPGP_HASH_INSECURE_MD5: i32 = 1;
 const OPENPGP_HASH_INSECURE_SHA1: i32 = 2;
@@ -205,8 +237,6 @@ fn process_subpacket<'a>(
         SUBPACKET_REVOCABLE |
         // useless, not generated
         SUBPACKET_PLACEHOLDER => {
-            #[cfg(test)]
-            eprintln!("Unsupported packet!");
             Err(Error::IllFormedSignature)
         }
         SUBPACKET_SIG_EXPIRATION_TIME => {
@@ -267,9 +297,10 @@ pub fn parse<'a>(
     data: &'a [u8],
     timestamp: u32,
     allow_weak_hashes: AllowWeakHashes,
+    expected_type: SignatureType,
 ) -> Result<SigInfo, Error> {
     Reader::read_all(data, Error::TrailingJunk, |reader| {
-        read_signature(reader, timestamp, allow_weak_hashes)
+        read_signature(reader, timestamp, allow_weak_hashes, expected_type)
     })
 }
 
@@ -278,13 +309,14 @@ pub fn read_signature<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
     allow_weak_hashes: AllowWeakHashes,
+    expected_type: SignatureType,
 ) -> Result<SigInfo, Error> {
     let packet = packet::next(reader)?.ok_or(Error::PrematureEOF)?;
     if packet.tag() != 2 {
         return Err(Error::IllFormedSignature);
     }
     Reader::read_all(packet.contents(), Error::TrailingJunk, |e| {
-        parse_packet_body(e, timestamp, allow_weak_hashes)
+        parse_packet_body(e, timestamp, allow_weak_hashes, expected_type)
     })
 }
 
@@ -292,6 +324,7 @@ fn parse_packet_body<'a>(
     reader: &mut Reader<'a>,
     timestamp: u32,
     allow_weak_hashes: AllowWeakHashes,
+    expected_type: SignatureType,
 ) -> Result<SigInfo, Error> {
     let version = reader.byte()?;
     #[cfg(test)]
@@ -305,11 +338,23 @@ fn parse_packet_body<'a>(
         creation_time: None,
         expiration_time: None,
     };
+    let check_sig_type = |reader: &mut Reader| {
+        let actual_type = reader.byte()?;
+        if actual_type == expected_type as u8 {
+            Ok(())
+        } else {
+            Err(Error::WrongSignatureType {
+                expected_type,
+                actual_type,
+            })
+        }
+    };
     match version {
         3 => {
-            if reader.byte()? != 5 || reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
+            if reader.byte()? != 5 {
                 return Err(Error::IllFormedSignature);
             }
+            check_sig_type(reader)?;
             siginfo.creation_time = Some(reader.be_u32()?);
             key_id = [0u8; 8];
             key_id.copy_from_slice(reader.get_bytes(8)?);
@@ -319,9 +364,7 @@ fn parse_packet_body<'a>(
         }
         4 => {
             // Signature type; we only allow OPENPGP_SIGNATURE_TYPE_BINARY
-            if reader.byte()? != OPENPGP_SIGNATURE_TYPE_BINARY {
-                return Err(Error::IllFormedSignature);
-            }
+            check_sig_type(reader)?;
             pkey_alg = reader.byte()?;
             hash_alg = reader.byte()?;
             let hashed_subpackets = reader.be_u16()?;
@@ -371,7 +414,7 @@ fn parse_packet_body<'a>(
     }
     let mpis = pkey_alg_mpis(pkey_alg, version)?;
     if i32::from(hash_alg) == OPENPGP_HASH_INSECURE_MD5 {
-        return Err(Error::InsecureAlgorithm(hash_alg.into()))
+        return Err(Error::InsecureAlgorithm(hash_alg.into()));
     }
     check_hash_algorithm(hash_alg.into(), allow_weak_hashes)?;
     // Check the creation time
@@ -407,7 +450,8 @@ mod tests {
             Reader::read_all(TRAILING_JUNK, Error::TrailingJunk, |r| read_signature(
                 r,
                 0,
-                AllowWeakHashes::No
+                AllowWeakHashes::No,
+                SignatureType::Binary,
             )
             .map(drop))
             .unwrap_err(),
@@ -417,14 +461,45 @@ mod tests {
             read_signature(
                 &mut Reader::new(&EDDSA_SIG[..EDDSA_SIG.len() - 1]),
                 0,
-                AllowWeakHashes::No
+                AllowWeakHashes::No,
+                SignatureType::Binary,
             )
             .unwrap_err(),
             Error::PrematureEOF
         );
-        let sig = read_signature(&mut Reader::new(EDDSA_SIG), 0, AllowWeakHashes::No).unwrap();
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(EDDSA_SIG),
+                0,
+                AllowWeakHashes::No,
+                SignatureType::Text,
+            )
+            .unwrap_err(),
+            Error::WrongSignatureType {
+                expected_type: SignatureType::Text,
+                actual_type: 0,
+            }
+        );
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(EDDSA_SIG),
+                1611626265,
+                AllowWeakHashes::No,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::SignatureNotValidYet
+        );
+        let sig = read_signature(
+            &mut Reader::new(EDDSA_SIG),
+            0,
+            AllowWeakHashes::No,
+            SignatureType::Binary,
+        )
+        .unwrap();
         assert_eq!(&sig.key_id[..], b"\x28\xA4\x5C\x93\xB0\xB5\xB6\xE0");
         assert_eq!(sig.creation_time, 1611626266);
+        assert!(sig.expiration_time.is_none());
         assert_eq!(sig.fingerprint.unwrap()[12..], sig.key_id[..]);
     }
     #[test]
@@ -464,7 +539,16 @@ mod tests {
             } else {
                 Error::UnsupportedSignatureVersion
             };
-            assert_eq!(parse_packet_body(&mut Reader::new(&[i]), 0, AllowWeakHashes::No).unwrap_err(), e);
+            assert_eq!(
+                parse_packet_body(
+                    &mut Reader::new(&[i]),
+                    0,
+                    AllowWeakHashes::No,
+                    SignatureType::Binary
+                )
+                .unwrap_err(),
+                e
+            );
         }
     }
 }
