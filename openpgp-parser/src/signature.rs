@@ -211,7 +211,7 @@ fn process_subpacket<'a>(
         }
         SUBPACKET_SIG_EXPIRATION_TIME => {
             let timestamp = reader.be_u32()?;
-            if time != 0 && timestamp >= time {
+            if time != 0 && timestamp < time {
                 Err(Error::SignatureExpired)
             } else if core::mem::replace(&mut id.expiration_time, Some(timestamp)).is_some() {
                 Err(Error::IllFormedSignature)
