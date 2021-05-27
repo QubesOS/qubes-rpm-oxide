@@ -5,14 +5,19 @@
 //! will be passed to a different OpenPGP implementation.
 
 #![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
-#![cfg_attr(ellipsis_inclusive_range_deprecated, allow(ellipsis_inclusive_range_patterns))]
+#![cfg_attr(
+    ellipsis_inclusive_range_deprecated,
+    allow(ellipsis_inclusive_range_patterns)
+)]
 #![forbid(missing_docs, unsafe_code, deprecated)]
 // #![deny(warnings)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-#[cfg(any(not(any(const_fn_stable, const_fn_unstable)),
-          not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
-          not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed))))]
+#[cfg(any(
+    not(any(const_fn_stable, const_fn_unstable)),
+    not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
+    not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed))
+))]
 compile_error!("build script bug");
 
 pub use buffer::{EOFError, Reader};

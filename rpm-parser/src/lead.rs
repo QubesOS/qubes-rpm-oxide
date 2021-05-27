@@ -93,7 +93,17 @@ impl RPMLead {
         let signature_type = read_be_u16(&buf[78..80]);
         let mut reserved = [0u8; 16];
         reserved.copy_from_slice(&buf[80..]);
-        Self { magic, major, minor, ty, archnum, name, osnum, signature_type, reserved }
+        Self {
+            magic,
+            major,
+            minor,
+            ty,
+            archnum,
+            name,
+            osnum,
+            signature_type,
+            reserved,
+        }
     }
 }
 

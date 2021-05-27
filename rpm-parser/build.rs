@@ -1,5 +1,5 @@
-use std::process;
 use std::env;
+use std::process;
 
 fn main() {
     let rustc = env::var("RUSTC").unwrap();
