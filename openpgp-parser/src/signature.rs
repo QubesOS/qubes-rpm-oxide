@@ -486,7 +486,7 @@ mod tests {
                 SignatureType::Binary,
             )
             .unwrap_err(),
-            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _)
         );
         assert_eq!(
             read_signature(
@@ -496,7 +496,7 @@ mod tests {
                 SignatureType::Binary,
             )
             .unwrap_err(),
-            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _)
         );
     }
     #[test]
@@ -511,7 +511,7 @@ mod tests {
                 SignatureType::Binary,
             )
             .unwrap_err(),
-            Error::UnsupportedHashAlgorithm(255),
+            Error::UnsupportedHashAlgorithm(255)
         );
     }
     #[test]
@@ -526,7 +526,7 @@ mod tests {
                 SignatureType::Binary,
             )
             .unwrap_err(),
-            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_SHA1 as _),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_SHA1 as _)
         );
         read_signature(
             &mut Reader::new(&s[..]),

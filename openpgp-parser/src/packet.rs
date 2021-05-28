@@ -153,6 +153,41 @@ mod tests {
                 .serialize();
                 assert_eq!(serialized[0] & 0b1100_0000, 0b1100_0000);
                 assert_eq!(serialized[0] & 0b0011_1111, tag);
+                if j < 192 {
+                    assert_eq!(usize::from(serialized[1]), j);
+                    assert_eq!(serialized.len(), j + 2);
+                } else if j < 8384 {
+                    assert_eq!(serialized.len(), j + 3);
+                    let (fst, snd) = (serialized[1], serialized[2]);
+                    assert!(fst >= 192 && fst < 224);
+                    assert_eq!((usize::from(fst) - 192) << 8 | usize::from(snd), j - 192);
+                    if j == 8383 {
+                        assert_eq!(fst, 223);
+                        assert_eq!(snd, 255);
+                    } else if j == 192 {
+                        assert_eq!(fst, 192);
+                        assert_eq!(snd, 0);
+                    }
+                    for k in 1..6 {
+                        let mut short_reader = Reader::new(&serialized[..k]);
+                        assert_eq!(next(&mut short_reader).unwrap_err(), Error::PrematureEOF);
+                    }
+                } else {
+                    assert_eq!(serialized.len(), j + 6);
+                    assert_eq!(serialized[1], 255);
+                    assert_eq!((serialized[2] as u32) << 24 |
+                               (serialized[3] as u32) << 16 |
+                               (serialized[4] as u32) << 8 |
+                               (serialized[5] as u32), j as u32);
+                    for k in 1..6 {
+                        let mut short_reader = Reader::new(&serialized[..k]);
+                        assert_eq!(next(&mut short_reader).unwrap_err(), Error::PrematureEOF);
+                    }
+                }
+                {
+                    let mut short_reader = Reader::new(&serialized[..serialized.len() - 1]);
+                    assert_eq!(next(&mut short_reader).unwrap_err(), Error::PrematureEOF);
+                }
                 let mut reader = Reader::new(&serialized);
                 let Packet {
                     tag: deserialized_tag,
