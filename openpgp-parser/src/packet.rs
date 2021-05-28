@@ -1,6 +1,8 @@
 //! Utility functions for parsing OpenPGP packets
 
 use super::{Error, Reader};
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
 /// The format of a packet
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -86,21 +88,21 @@ impl<'a> Packet<'a> {
 
     /// Wraps the packet in OpenPGP encapsulation
     #[cfg(feature = "alloc")]
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> alloc::vec::Vec<u8> {
         let len = self.buffer.len();
         assert!(u64::from(u32::max_value()) >= len as u64);
         let tag_byte = self.tag | 0b1100_0000u8;
         let mut v = match len {
             0...191 => {
                 // 1-byte
-                let mut v = Vec::with_capacity(2 + len);
+                let mut v = alloc::vec::Vec::with_capacity(2 + len);
                 v.push(tag_byte);
                 v.push(len as u8);
                 v
             }
             192...8383 => {
                 // 2-byte
-                let mut v = Vec::with_capacity(3 + len);
+                let mut v = alloc::vec::Vec::with_capacity(3 + len);
                 let len = len - 192;
                 v.push(tag_byte);
                 v.push((len >> 8) as u8 + 192);
@@ -109,7 +111,7 @@ impl<'a> Packet<'a> {
             }
             _ => {
                 // 5-byte
-                let mut v = Vec::with_capacity(6 + len);
+                let mut v = alloc::vec::Vec::with_capacity(6 + len);
                 v.extend_from_slice(&[
                     tag_byte,
                     0xFF,
@@ -129,7 +131,7 @@ impl<'a> Packet<'a> {
 #[cfg(all(feature = "alloc", test))]
 mod tests {
     use super::*;
-    fn serialize(tag: u8, buffer: &[u8]) -> Vec<u8> {
+    fn serialize(tag: u8, buffer: &[u8]) -> alloc::vec::Vec<u8> {
         Packet { tag, buffer }.serialize()
     }
     #[test]
@@ -140,6 +142,7 @@ mod tests {
     }
     #[test]
     fn check_packet_serialization() {
+        assert_eq!(0b1100_0000, 0xC0);
         let buffer = vec![0u8; 65536];
         for tag in 1..64 {
             for j in 0..buffer.len() {
