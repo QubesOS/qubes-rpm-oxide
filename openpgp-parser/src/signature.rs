@@ -460,9 +460,84 @@ fn parse_packet_body<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    static EDDSA_SIG: &'static [u8] = include_bytes!("../../data/eddsa.asc");
+    #[test]
+    fn signature_not_valid_yet() {
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(EDDSA_SIG),
+                1611626265,
+                AllowWeakHashes::No,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::SignatureNotValidYet
+        );
+    }
+    #[test]
+    fn md5_rejected() {
+        let mut s = EDDSA_SIG.to_owned();
+        s[5] = OPENPGP_HASH_INSECURE_MD5 as _;
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(&s[..]),
+                1611626266,
+                AllowWeakHashes::No,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _),
+        );
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(&s[..]),
+                1611626266,
+                AllowWeakHashes::Yes,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_MD5 as _),
+        );
+    }
+    #[test]
+    fn bad_sig_alg() {
+        let mut s = EDDSA_SIG.to_owned();
+        s[5] = 255;
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(&s[..]),
+                1611626266,
+                AllowWeakHashes::Yes,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::UnsupportedHashAlgorithm(255),
+        );
+    }
+    #[test]
+    fn sha1_rejected() {
+        let mut s = EDDSA_SIG.to_owned();
+        s[5] = OPENPGP_HASH_INSECURE_SHA1 as _;
+        assert_eq!(
+            read_signature(
+                &mut Reader::new(&s[..]),
+                1611626266,
+                AllowWeakHashes::No,
+                SignatureType::Binary,
+            )
+            .unwrap_err(),
+            Error::InsecureAlgorithm(OPENPGP_HASH_INSECURE_SHA1 as _),
+        );
+        read_signature(
+            &mut Reader::new(&s[..]),
+            1611626266,
+            AllowWeakHashes::Yes,
+            SignatureType::Binary,
+        )
+        .unwrap();
+    }
     #[test]
     fn parses_real_world_sig() {
-        static EDDSA_SIG: &'static [u8] = include_bytes!("../../data/eddsa.asc");
         static TRAILING_JUNK: &'static [u8] = include_bytes!("../../data/trailing-junk.asc");
         assert_eq!(TRAILING_JUNK.len(), EDDSA_SIG.len() + 1);
         assert_eq!(
@@ -498,16 +573,6 @@ mod tests {
                 expected_type: SignatureType::Text,
                 actual_type: 0,
             }
-        );
-        assert_eq!(
-            read_signature(
-                &mut Reader::new(EDDSA_SIG),
-                1611626265,
-                AllowWeakHashes::No,
-                SignatureType::Binary,
-            )
-            .unwrap_err(),
-            Error::SignatureNotValidYet
         );
         let sig = read_signature(
             &mut Reader::new(EDDSA_SIG),
