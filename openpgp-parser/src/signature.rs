@@ -48,6 +48,37 @@ pub enum SignatureType {
     Timestamp = 0x40,
 }
 
+/// Rivest-Shamir-Aldeman (RSA) cryptography
+const OPENPGP_PUBLIC_KEY_RSA: u8 = 1;
+
+/// Legacy encrypt-only RSA
+const OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY: u8 = 2;
+
+/// Legacy sign-only RSA
+const OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY: u8 = 3;
+
+/// Encrypt-only ElGamal
+const OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY: u8 = 16;
+
+/// Finite-field Digital Signature Algorithm (DSA)
+const OPENPGP_PUBLIC_KEY_DSA: u8 = 17;
+
+/// Elliptic-curve Diffe-Hellman
+const OPENPGP_PUBLIC_KEY_ECDH: u8 = 18;
+
+/// Elliptic-curve Digital Signature Algorithm
+const OPENPGP_PUBLIC_KEY_ECDSA: u8 = 19;
+
+/// ElGamal signing and encryption.  This is insecure as ElGamal signatures
+/// have been broken.
+const OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT: u8 = 20;
+
+/// Finite-field Diffe-Hellman
+const OPENPGP_PUBLIC_KEY_DH: u8 = 21;
+
+/// Edwards-curve Digital Signature Algorithm
+const OPENPGP_PUBLIC_KEY_EDDSA: u8 = 22;
+
 /// Read a multiprecision integer (MPI) from `reader`.  Value is returned as a
 /// slice.
 pub fn read_mpi<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
@@ -82,18 +113,6 @@ const OPENPGP_HASH_SHA256: i32 = 8;
 const OPENPGP_HASH_SHA384: i32 = 9;
 const OPENPGP_HASH_SHA512: i32 = 10;
 const OPENPGP_HASH_SHA224: i32 = 11;
-
-// Public key algorithms
-const OPENPGP_PUBLIC_KEY_RSA: u8 = 1;
-const OPENPGP_PUBLIC_KEY_LEGACY_RSA_ENCRYPT_ONLY: u8 = 2;
-const OPENPGP_PUBLIC_KEY_LEGACY_RSA_SIGN_ONLY: u8 = 3;
-const OPENPGP_PUBLIC_KEY_ELGAMAL_ENCRYPT_ONLY: u8 = 16;
-const OPENPGP_PUBLIC_KEY_DSA: u8 = 17;
-const OPENPGP_PUBLIC_KEY_ECDH: u8 = 18;
-const OPENPGP_PUBLIC_KEY_ECDSA: u8 = 19;
-const OPENPGP_PUBLIC_KEY_INSECURE_ELGAMAL_SIGN_ENCRYPT: u8 = 20;
-const OPENPGP_PUBLIC_KEY_DH: u8 = 21;
-const OPENPGP_PUBLIC_KEY_EDDSA: u8 = 22;
 
 // Signature subpackets
 const SUBPACKET_CREATION_TIME: u8 = 2;
