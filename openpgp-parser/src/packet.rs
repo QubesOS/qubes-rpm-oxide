@@ -126,6 +126,7 @@ impl<'a> Packet<'a> {
                     let mut v = Vec::with_capacity(6 + len);
                     v.push(tag_byte);
                     v.extend_from_slice(&[
+                        0xFF,
                         (len >> 24) as u8,
                         (len >> 16) as u8,
                         (len >> 8) as u8,
