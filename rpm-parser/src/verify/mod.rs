@@ -70,7 +70,7 @@ pub fn verify_package(
 
     if let Some(weak_digest) = sig_header.header_payload_weak_digest.take() {
         header_payload_weak_digest = Some(weak_digest.1.clone());
-        validator.add_untrusted_digest(weak_digest.0, weak_digest.1.clone());
+        validator.add_untrusted_digest(weak_digest.0, weak_digest.1);
     }
 
     let mut prelude = [0u8; 16];
