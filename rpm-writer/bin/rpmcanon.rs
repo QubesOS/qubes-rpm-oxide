@@ -23,8 +23,7 @@ extern crate rpm_writer;
 
 use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::RpmTransactionSet;
-use rpm_writer::{HeaderBuilder, HeaderEntry};
-use std::ffi::{CStr, CString, OsStr};
+use std::ffi::{CString, OsStr};
 use std::fs::{File, OpenOptions};
 use std::io::{Result, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -39,13 +38,6 @@ fn main() {
 fn errno() -> std::os::raw::c_int {
     unsafe { *libc::__errno_location() }
 }
-
-const RPMTAG_SIG_BASE: u32 = 256;
-const RPMSIGTAG_SHA1HEADER: u32 = RPMTAG_SIG_BASE + 13;
-const RPMSIGTAG_SHA256HEADER: u32 = RPMTAG_SIG_BASE + 17;
-const RPMSIGTAG_RSAHEADER: u32 = RPMTAG_SIG_BASE + 12;
-const RPMSIGTAG_PGP: u32 = 1002;
-const RPMSIGTAG_MD5: u32 = 1004;
 
 fn usage(success: bool) -> i32 {
     const USAGE: &'static str = "Usage: rpmcanon [OPTIONS] -- SOURCE DESTINATION\n\n\
@@ -64,57 +56,6 @@ fn usage(success: bool) -> i32 {
     }
 }
 
-fn emit_header(
-    &rpm_parser::VerifyResult {
-        ref main_header,
-        ref header_payload_sig,
-        ref header_sig,
-        ref main_header_bytes,
-        ref main_header_sha1_hash,
-        ref main_header_sha256_hash,
-        ref header_payload_weak_digest,
-    }: &rpm_parser::VerifyResult,
-    mut dest: Option<&mut std::io::Write>,
-    _allow_weak_hashes: AllowWeakHashes,
-    _token: rpm_crypto::InitToken,
-) -> std::io::Result<()> {
-    let dest = dest.as_mut().expect("we always pass a stream; qed");
-    let magic_offset = 96;
-    let mut hdr = HeaderBuilder::new(rpm_writer::HeaderKind::Signature);
-    hdr.push(
-        RPMSIGTAG_SHA1HEADER,
-        HeaderEntry::String(
-            CStr::from_bytes_with_nul(&main_header_sha1_hash)
-                .expect("RPM NUL-terminates its hex data"),
-        ),
-    );
-    hdr.push(
-        RPMSIGTAG_SHA256HEADER,
-        HeaderEntry::String(
-            CStr::from_bytes_with_nul(&main_header_sha256_hash)
-                .expect("RPM NUL-terminates its hex data"),
-        ),
-    );
-    hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*header_sig));
-    if let &Some(ref sig) = header_payload_sig {
-        hdr.push(RPMSIGTAG_PGP, HeaderEntry::Bin(sig));
-    }
-    if let &Some(ref weak_digest) = header_payload_weak_digest {
-        hdr.push(RPMSIGTAG_MD5, HeaderEntry::Bin(weak_digest));
-    }
-    hdr.push(1007, HeaderEntry::U32(&[0]));
-    hdr.push(1000, HeaderEntry::U32(&[0]));
-    let mut out_data = vec![0; magic_offset];
-    out_data[..magic_offset].copy_from_slice(&main_header.lead());
-    hdr.emit(&mut out_data).expect("writes to a vec never fail");
-    let fixup = (out_data.len() + 7 & !7) - out_data.len();
-    out_data.extend_from_slice(&[0u8; 7][..fixup]);
-    #[cfg(debug_assertions)]
-    rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_weak_hashes, _token).unwrap();
-    dest.write_all(&out_data)?;
-    dest.write_all(&main_header_bytes)
-}
-
 fn process_file(
     tx: &RpmTransactionSet,
     src: &std::ffi::OsStr,
@@ -124,15 +65,7 @@ fn process_file(
     preserve_old_signature: bool,
     token: rpm_crypto::InitToken,
 ) -> Result<()> {
-    let emit_header: &mut FnMut(
-        &rpm_parser::VerifyResult,
-        Option<&mut std::io::Write>,
-    ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_weak_hashes, token);
     let mut s = File::open(src)?;
-    // Ignore the lead
-    let _ = rpm_parser::read_lead(&mut s)?;
-    // Read the signature header
-    let mut sig_header = rpm_parser::load_signature(&mut s, allow_weak_hashes, token)?;
     let mut do_rename = true;
     let (parent_dir, mut dest, fname, tmp_path) = {
         let mut options = OpenOptions::new();
@@ -212,15 +145,14 @@ fn process_file(
             (parent, File::from_raw_fd(res), c_fname, tmp_path)
         }
     };
-    let rpm_parser::VerifyResult { .. } = rpm_parser::verify_package(
-        &mut s,
-        &mut sig_header,
-        &tx.keyring(),
+    rpm_writer::canonicalize_package(
         allow_old_pkgs,
         preserve_old_signature,
         token,
-        Some(emit_header),
-        Some(&mut dest),
+        &mut s,
+        &mut dest,
+        allow_weak_hashes,
+        &tx.keyring(),
     )
     .map_err(|e| {
         if cfg!(not(target_os = "linux")) {

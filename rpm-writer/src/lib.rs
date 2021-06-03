@@ -18,10 +18,19 @@
 ))]
 compile_error!("build script bug");
 extern crate rpm_parser;
+extern crate rpm_crypto;
+extern crate openpgp_parser;
 use rpm_parser::TagData;
 use std::collections::BTreeMap;
 use std::ffi::CStr;
 use std::io::Write;
+
+const RPMTAG_SIG_BASE: u32 = 256;
+const RPMSIGTAG_SHA1HEADER: u32 = RPMTAG_SIG_BASE + 13;
+const RPMSIGTAG_SHA256HEADER: u32 = RPMTAG_SIG_BASE + 17;
+const RPMSIGTAG_RSAHEADER: u32 = RPMTAG_SIG_BASE + 12;
+const RPMSIGTAG_PGP: u32 = 1002;
+const RPMSIGTAG_MD5: u32 = 1004;
 
 /// What kind of header is this?
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -218,6 +227,86 @@ impl<'a> HeaderBuilder<'a> {
         )]))?;
         Ok(())
     }
+}
+
+fn emit_header(
+    &rpm_parser::VerifyResult {
+        ref main_header,
+        ref header_payload_sig,
+        ref header_sig,
+        ref main_header_bytes,
+        ref main_header_sha1_hash,
+        ref main_header_sha256_hash,
+        ref header_payload_weak_digest,
+    }: &rpm_parser::VerifyResult,
+    mut dest: Option<&mut std::io::Write>,
+    _allow_weak_hashes: openpgp_parser::AllowWeakHashes,
+    _token: rpm_crypto::InitToken,
+) -> std::io::Result<()> {
+    let dest = dest.as_mut().expect("we always pass a stream; qed");
+    let magic_offset = 96;
+    let mut hdr = HeaderBuilder::new(HeaderKind::Signature);
+    hdr.push(
+        RPMSIGTAG_SHA1HEADER,
+        HeaderEntry::String(
+            CStr::from_bytes_with_nul(&main_header_sha1_hash)
+                .expect("RPM NUL-terminates its hex data"),
+        ),
+    );
+    hdr.push(
+        RPMSIGTAG_SHA256HEADER,
+        HeaderEntry::String(
+            CStr::from_bytes_with_nul(&main_header_sha256_hash)
+                .expect("RPM NUL-terminates its hex data"),
+        ),
+    );
+    hdr.push(RPMSIGTAG_RSAHEADER, HeaderEntry::Bin(&*header_sig));
+    if let &Some(ref sig) = header_payload_sig {
+        hdr.push(RPMSIGTAG_PGP, HeaderEntry::Bin(sig));
+    }
+    if let &Some(ref weak_digest) = header_payload_weak_digest {
+        hdr.push(RPMSIGTAG_MD5, HeaderEntry::Bin(weak_digest));
+    }
+    hdr.push(1007, HeaderEntry::U32(&[0]));
+    hdr.push(1000, HeaderEntry::U32(&[0]));
+    let mut out_data = vec![0; magic_offset];
+    out_data[..magic_offset].copy_from_slice(&main_header.lead());
+    hdr.emit(&mut out_data).expect("writes to a vec never fail");
+    let fixup = (out_data.len() + 7 & !7) - out_data.len();
+    out_data.extend_from_slice(&[0u8; 7][..fixup]);
+    #[cfg(debug_assertions)]
+    rpm_parser::load_signature(&mut &out_data[magic_offset..], _allow_weak_hashes, _token).unwrap();
+    dest.write_all(&out_data)?;
+    dest.write_all(&main_header_bytes)
+}
+
+pub fn canonicalize_package(
+    allow_old_pkgs: bool,
+    preserve_old_signature: bool,
+    token: rpm_crypto::InitToken,
+    source: &mut std::io::Read,
+    dest: &mut std::io::Write,
+    allow_weak_hashes: openpgp_parser::AllowWeakHashes,
+    keyring: &rpm_crypto::transaction::RpmKeyring,
+) -> std::io::Result<rpm_parser::VerifyResult> {
+    let mut emit_header: &mut FnMut(
+        &rpm_parser::VerifyResult,
+        Option<&mut std::io::Write>,
+    ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_weak_hashes, token);
+    // Ignore the lead
+    let _ = rpm_parser::read_lead(source)?;
+    // Read the signature header
+    let mut sig_header = rpm_parser::load_signature(source, allow_weak_hashes, token)?;
+    rpm_parser::verify_package(
+        source,
+        &mut sig_header,
+        keyring,
+        allow_old_pkgs,
+        preserve_old_signature,
+        token,
+        Some(&mut emit_header),
+        Some(dest),
+    )
 }
 
 #[cfg(test)]

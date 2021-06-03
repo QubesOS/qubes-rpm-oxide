@@ -8,11 +8,11 @@ build = "../rpm-parser/build.rs"
 
 [dependencies]
 rpm-parser = { version = "0.2.2", path = "../rpm-parser" }
-rpm-crypto = { version = "0.2.2", path = "../rpm-crypto", optional = true }
-openpgp-parser = { version = "0.2.2", path = "../openpgp-parser", optional = true }
+rpm-crypto = { version = "0.2.2", path = "../rpm-crypto" }
+openpgp-parser = { version = "0.2.2", path = "../openpgp-parser" }
 
 [features]
-bin = ["openpgp-parser", "rpm-crypto"]
+bin = []
 
 [[bin]]
 name = "rpmcanon"
