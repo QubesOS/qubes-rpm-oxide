@@ -16,7 +16,12 @@ impl Signature {
     ) -> Result<Self, Error> {
         super::init();
         // Check that the signature is valid
-        let sig_info = signature::parse(untrusted_buffer, time, allow_weak_hashes)?;
+        let sig_info = signature::parse(
+            untrusted_buffer,
+            time,
+            allow_weak_hashes,
+            signature::SignatureType::Binary,
+        )?;
         // We can now pass the buffer to RPM, since it is a valid signature
         let slice = untrusted_buffer;
         let mut params = Signature(std::ptr::null_mut());

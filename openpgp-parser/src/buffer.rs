@@ -2,11 +2,15 @@
 //! crate on `crates.io`.
 
 #[cfg(not(feature = "std"))]
-use core::mem::size_of;
+extern crate core;
+#[cfg(not(feature = "std"))]
+use self::core::mem;
+
 #[cfg(feature = "std")]
-use std::mem::size_of;
+use self::std::mem;
 #[cfg(feature = "std")]
 extern crate std;
+
 #[cfg(feature = "std")]
 impl From<EOFError> for std::io::Error {
     fn from(_: EOFError) -> Self {
@@ -30,10 +34,10 @@ macro_rules! gen_be_offset {
     ($($(#[$s:meta])* ($i: ident, $t: ty))+) => {$(
         $(#[$s])*
         pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
-            let range = offset..offset.wrapping_add(size_of::<$t>());
+            let range = offset..offset.wrapping_add(mem::size_of::<$t>());
             let data = self.untrusted_buffer.get(range).ok_or(EOFError)?;
             let mut res: $t = 0;
-            for i in 0..size_of::<$t>() {
+            for i in 0..mem::size_of::<$t>() {
                 res = res << 8 | data[i] as $t
             }
             Ok(res)
@@ -46,10 +50,10 @@ macro_rules! gen_le {
         $(#[$s])*
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
-            let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
+            let untrusted_buffer = self.get_bytes(mem::size_of::<$t>())?;
             let mut res: $t = 0;
-            for i in 0..size_of::<$t>() {
-                res = res << 8 | untrusted_buffer[size_of::<$t>() - 1 - i] as $t
+            for i in 0..mem::size_of::<$t>() {
+                res = res << 8 | untrusted_buffer[mem::size_of::<$t>() - 1 - i] as $t
             }
             Ok(res)
         }
@@ -61,9 +65,9 @@ macro_rules! gen_be {
         $(#[$s])*
         #[inline]
         pub fn $i(&mut self) -> Result<$t, EOFError> {
-            let untrusted_buffer = self.get_bytes(size_of::<$t>())?;
+            let untrusted_buffer = self.get_bytes(mem::size_of::<$t>())?;
             let mut res: $t = 0;
-            for i in 0..size_of::<$t>() {
+            for i in 0..mem::size_of::<$t>() {
                 res = res << 8 | untrusted_buffer[i] as $t
             }
             Ok(res)
@@ -76,11 +80,11 @@ macro_rules! gen_le_offset {
         $(#[$s])*
         #[inline]
         pub fn $i(&self, offset: usize) -> Result<$t, EOFError> {
-            let range = offset..offset.wrapping_add(size_of::<$t>());
+            let range = offset..offset.wrapping_add(mem::size_of::<$t>());
             let data = self.untrusted_buffer.get(range).ok_or(EOFError)?;
             let mut res: $t = 0;
-            for i in 0..size_of::<$t>() {
-                res = res << 8 | data[size_of::<$t>() - 1 - i] as $t
+            for i in 0..mem::size_of::<$t>() {
+                res = res << 8 | data[mem::size_of::<$t>() - 1 - i] as $t
             }
             Ok(res)
         }
