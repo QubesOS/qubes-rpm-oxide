@@ -140,6 +140,83 @@ mod tests {
         assert_eq!(serialize(0x7, &[b'a'][..]), vec![0b1100_0111, 0x1, b'a']);
         assert_eq!(serialize(0x10, &[b'a'][..]), vec![0b1101_0000, 0x1, b'a']);
     }
+
+    /// Create an old-format packet
+    #[test]
+    fn old_format_parsing() {
+        let mut buffer = vec![0u8; (1usize << 28) + 5];
+        for tag in 1..16 {
+            buffer[0] = 0x81 | tag << 2;
+            buffer[1] = 0;
+            {
+                let mut reader = Reader::new(&buffer[..1]);
+                assert_eq!(next(&mut reader).unwrap_err(), Error::PrematureEOF);
+            }
+            for len in 0..256 {
+                buffer[0] = 0x80 | tag << 2;
+                buffer[1] = len as _;
+                let mut reader = Reader::new(&buffer[..len + 2]);
+                let mut packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 0);
+                reader = Reader::new(&buffer[..len + 1]);
+                assert_eq!(next(&mut reader).unwrap_err(), Error::PrematureEOF);
+                reader = Reader::new(&buffer[..len + 3]);
+                packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 1);
+            }
+            buffer[0] = 0x81 | tag << 2;
+            buffer[1] = 0;
+            buffer[2] = 0;
+            for i in 1..3 {
+                let mut reader = Reader::new(&buffer[..i]);
+                assert_eq!(next(&mut reader).unwrap_err(), Error::PrematureEOF);
+            }
+            for len in 0..65536 {
+                buffer[1] = (len >> 8) as _;
+                buffer[2] = len as _;
+                let mut reader = Reader::new(&buffer[..len + 3]);
+                let mut packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 0);
+                reader = Reader::new(&buffer[..len + 2]);
+                assert_eq!(next(&mut reader).unwrap_err(), Error::PrematureEOF);
+                reader = Reader::new(&buffer[..len + 4]);
+                packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 1);
+            }
+            for len in 0..0x100000 {
+                // we cannot test every value, so we test a subset instead
+                let len = len * 100 + 10;
+                buffer[0] = 0x82 | tag << 2;
+                buffer[1] = (len >> 24) as _;
+                buffer[2] = (len >> 16) as _;
+                buffer[3] = (len >> 8) as _;
+                buffer[4] = len as _;
+                let mut reader = Reader::new(&buffer[..len + 5]);
+                let packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 0);
+                reader = Reader::new(&buffer[..len + 4]);
+                assert_eq!(next(&mut reader).unwrap_err(), Error::PrematureEOF);
+                reader = Reader::new(&buffer[..len + 6]);
+                let packet = next(&mut reader).unwrap().unwrap();
+                assert_eq!(packet.buffer.len(), len);
+                assert_eq!(packet.tag, tag);
+                assert_eq!(reader.len(), 1);
+            }
+            buffer[0] = 0x83 | tag << 2;
+            let mut reader = Reader::new(&buffer[..20]);
+            next(&mut reader).unwrap_err();
+        }
+    }
     #[test]
     fn check_packet_serialization() {
         assert_eq!(0b1100_0000, 0xC0);
