@@ -46,7 +46,7 @@ fn usage(success: bool) -> i32 {
                                  --preserve-old-signature Preserve and require the RPMv3 (header+payload) signature\n\
                                  --allow-weak-hashes allow packages signed with SHA-1 or SHA-224\n\
                                  --allow-old-pkgs allow packages that don’t have a payload digest in the main header\n\
-                                 --directory copy packages in SOURCE to DESTINATION; both directories must exist";
+                                 --dbpath=<path> set the RPM database path";
     if success {
         println!("{}", USAGE);
         0
@@ -207,7 +207,6 @@ fn process_file(
 }
 
 fn inner_main() -> i32 {
-    let token = rpm_crypto::init();
     let mut args = std::env::args_os().into_iter();
     let mut allow_weak_hashes = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
@@ -216,16 +215,26 @@ fn inner_main() -> i32 {
         Some(s) => s,
         None => return usage(false),
     };
+    let mut dbpath: Option<CString> = None;
     for i in &mut args {
-        match i.as_bytes() {
+        let bytes = i.as_bytes();
+        match bytes {
             b"--allow-weak-hashes" => allow_weak_hashes = AllowWeakHashes::Yes,
             b"--help" => return usage(true),
             b"--allow-old-pkgs" => allow_old_pkgs = true,
             b"--preserve-old-signature" => preserve_old_signature = true,
             b"--" => break,
+            _ if bytes.starts_with(b"--dbpath=") && dbpath.is_none() => {
+                dbpath = Some(CString::new(&bytes[9..]).expect("NUL in command line banned"))
+            }
             _ => return usage(false),
         }
     }
+    let token = if let Some(dbpath) = dbpath {
+        rpm_crypto::init(Some(&*dbpath))
+    } else {
+        rpm_crypto::init(None)
+    };
     let args: Vec<_> = args.collect();
     if args.len() != 2 {
         return usage(false);

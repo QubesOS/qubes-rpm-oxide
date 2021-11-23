@@ -24,22 +24,48 @@ pub struct Signature {
 pub use init::{init, InitToken};
 
 mod init {
+    use std;
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct InitToken(());
-    pub fn init() -> InitToken {
+    pub fn init(path: Option<&std::ffi::CStr>) -> InitToken {
         #[allow(deprecated)] // we need to support old Rust
         use std::sync::{Once, ONCE_INIT};
         #[allow(deprecated)] // we need to support old Rust
         static RPM_CRYPTO_INIT_ONCE: Once = ONCE_INIT;
-        use std::os::raw::{c_char, c_int};
+        use std::os::raw::{c_char, c_int, c_void};
         use std::ptr;
         #[link(name = "rpm")]
         extern "C" {
             fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
         }
+        #[link(name = "rpmio")]
+        extern "C" {
+            fn rpmPushMacro(
+                mc: *mut c_void,
+                n: *const c_char,
+                o: *const c_char,
+                b: *const c_char,
+                level: c_int,
+            ) -> c_int;
+        }
+        // Indicate that this macro was set on the command line
+        const RMIL_CMDLINE: c_int = -7;
         // Safety: the C function is called correctly.
-        RPM_CRYPTO_INIT_ONCE
-            .call_once(|| assert_eq!(unsafe { rpmReadConfigFiles(ptr::null(), ptr::null()) }, 0));
+        RPM_CRYPTO_INIT_ONCE.call_once(|| unsafe {
+            assert_eq!(rpmReadConfigFiles(ptr::null(), ptr::null()), 0);
+            if let Some(path) = path {
+                assert_eq!(
+                    rpmPushMacro(
+                        ptr::null_mut(),
+                        b"_dbpath\0".as_ptr() as _,
+                        ptr::null(),
+                        path.as_ptr(),
+                        RMIL_CMDLINE,
+                    ),
+                    0
+                );
+            }
+        });
         InitToken(())
     }
 }

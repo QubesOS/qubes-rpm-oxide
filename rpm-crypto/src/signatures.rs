@@ -15,7 +15,6 @@ impl Signature {
         allow_weak_hashes: AllowWeakHashes,
         _: InitToken,
     ) -> Result<Self, Error> {
-        super::init();
         // Check that the signature is valid
         let sig_info = signature::parse(
             untrusted_buffer,

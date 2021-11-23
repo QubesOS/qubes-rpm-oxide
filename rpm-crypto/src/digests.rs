@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn check_rpm_crypto() {
         for &i in &[8, 9, 10] {
-            let mut s = DigestCtx::init(i, AllowWeakHashes::No, super::super::init()).unwrap();
+            let mut s = DigestCtx::init(i, AllowWeakHashes::No, super::super::init(None)).unwrap();
             println!("Initialized RPM crypto context");
             s.update(b"this is a test!");
             println!("Finalizing");

@@ -86,7 +86,7 @@ mod tests {
     fn parses_lua_rpm() {
         use rpm_crypto;
         let mut s: &[u8] = include_bytes!("../../data/lua-5.4.2-1.fc33.x86_64.rpm");
-        let token = rpm_crypto::init();
+        let token = rpm_crypto::init(None);
         let RPMPackage {
             lead: _,
             signature,

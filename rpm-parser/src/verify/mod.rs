@@ -194,7 +194,7 @@ mod tests {
             let tx = TOKEN.with(|&s|RpmTransactionSet::new(s));
             tx.keyring()
         };
-        static TOKEN: InitToken = rpm_crypto::init();
+        static TOKEN: InitToken = rpm_crypto::init(None);
         static SHA256: DigestCtx = TOKEN.with(|&t|DigestCtx::init(8, openpgp_parser::AllowWeakHashes::No,t))
             .expect("SHA-256 is supported");
     }
