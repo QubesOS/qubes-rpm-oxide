@@ -17,9 +17,9 @@
     not(any(try_from_stable, try_from_unstable))
 ))]
 compile_error!("build script bug");
-extern crate rpm_parser;
-extern crate rpm_crypto;
 extern crate openpgp_parser;
+extern crate rpm_crypto;
+extern crate rpm_parser;
 use rpm_parser::TagData;
 use std::collections::BTreeMap;
 use std::ffi::CStr;

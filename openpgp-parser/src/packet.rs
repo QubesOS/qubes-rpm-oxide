@@ -252,10 +252,13 @@ mod tests {
                 } else {
                     assert_eq!(serialized.len(), j + 6);
                     assert_eq!(serialized[1], 255);
-                    assert_eq!((serialized[2] as u32) << 24 |
-                               (serialized[3] as u32) << 16 |
-                               (serialized[4] as u32) << 8 |
-                               (serialized[5] as u32), j as u32);
+                    assert_eq!(
+                        (serialized[2] as u32) << 24
+                            | (serialized[3] as u32) << 16
+                            | (serialized[4] as u32) << 8
+                            | (serialized[5] as u32),
+                        j as u32
+                    );
                     for k in 1..6 {
                         let mut short_reader = Reader::new(&serialized[..k]);
                         assert_eq!(next(&mut short_reader).unwrap_err(), Error::PrematureEOF);
