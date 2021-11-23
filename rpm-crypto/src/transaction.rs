@@ -1,8 +1,11 @@
 use super::{DigestCtx, InitToken, RawSignature, Signature};
 use std::os::raw::c_int;
 
-enum Rpmts {}
-enum RpmKeyring_ {}
+#[repr(C)]
+struct Rpmts(u8);
+#[repr(C)]
+struct RpmKeyring_(u8);
+
 #[repr(C)]
 pub struct RpmTransactionSet(*mut Rpmts);
 

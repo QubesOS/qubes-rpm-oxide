@@ -2,7 +2,8 @@ use super::InitToken;
 use openpgp_parser::{signature, AllowWeakHashes, Error};
 use std;
 use std::os::raw::{c_int, c_uint};
-enum RpmPgpDigParams {}
+#[repr(C)]
+struct RpmPgpDigParams(u8);
 
 #[repr(C)]
 pub struct Signature(*mut RpmPgpDigParams);

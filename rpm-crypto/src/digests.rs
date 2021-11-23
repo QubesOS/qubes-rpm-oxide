@@ -4,7 +4,8 @@ use std::io::{Result as IResult, Write};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 
-enum ExternDigestCtx {}
+#[repr(C)]
+struct ExternDigestCtx(u8);
 
 #[repr(C)]
 pub struct DigestCtx(*mut ExternDigestCtx);
