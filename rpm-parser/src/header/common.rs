@@ -155,8 +155,8 @@ pub(super) fn load_header<'a>(
                     let r = reader.get_bytes(len).expect("length is in bounds; qed");
                     if is_signature {
                         // All strings in the signature header are printable ASCII
-                        for &i in &r[..len - 1] {
-                            if i < b' ' || i > 0x7E {
+                        for &i in r {
+                            if i != 0 && (i < b' ' || i > 0x7E) {
                                 bad_data!(
                                     "Non-printable-ASCII character in signature header string"
                                 );
