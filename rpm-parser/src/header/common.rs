@@ -87,7 +87,7 @@ pub(super) fn load_header<'a>(
         };
         {
             let mut trailer_array = [TagData::default()];
-            TagData::as_bytes_mut(&mut trailer_array).copy_from_slice(&data[region_offset as _..]);
+            TagData::as_bytes_mut(&mut trailer_array).copy_from_slice(&data[region_offset..]);
             let trailer = trailer_array[0];
             let trailer_offset = trailer.offset() as i32;
             if last_tag != trailer.tag() {
