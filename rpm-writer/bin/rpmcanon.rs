@@ -25,7 +25,7 @@ use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::RpmTransactionSet;
 use std::ffi::{CString, OsStr};
 use std::fs::{File, OpenOptions};
-use std::io::{Result, Write};
+use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd};
@@ -56,6 +56,52 @@ fn usage(success: bool) -> i32 {
     }
 }
 
+mod progress_reader {
+    use std;
+    pub enum ReportProgress {
+        No,
+        Yes,
+    }
+    use File;
+    pub struct ProgressReportingReader {
+        inner: File,
+        do_report: Option<u64>,
+    }
+    impl ProgressReportingReader {
+        pub fn new(inner: File, report: ReportProgress) -> Self {
+            match report {
+                ReportProgress::Yes => Self {
+                    inner,
+                    do_report: Some(0),
+                },
+                ReportProgress::No => Self {
+                    inner,
+                    do_report: None,
+                },
+            }
+        }
+    }
+    impl std::io::Read for ProgressReportingReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            let bytes_read = self.inner.read(buffer)?;
+            if let Some(ref mut bytes_so_far) = self.do_report {
+                if bytes_read == 0 {
+                    println!("{} bytes total", *bytes_so_far);
+                } else {
+                    let old_count = *bytes_so_far >> 20;
+                    let new_count = *bytes_so_far + bytes_read as u64;
+                    if new_count >> 20 != old_count {
+                        println!("{} bytes so far", new_count)
+                    }
+                    *bytes_so_far = new_count;
+                }
+            }
+            Ok(bytes_read)
+        }
+    }
+}
+use progress_reader::ReportProgress;
+
 fn process_file(
     tx: &RpmTransactionSet,
     src: &std::ffi::OsStr,
@@ -63,9 +109,10 @@ fn process_file(
     allow_weak_hashes: AllowWeakHashes,
     allow_old_pkgs: bool,
     preserve_old_signature: bool,
+    report_progress: ReportProgress,
     token: rpm_crypto::InitToken,
-) -> Result<()> {
-    let mut s = File::open(src)?;
+) -> std::io::Result<()> {
+    let mut s = progress_reader::ProgressReportingReader::new(File::open(src)?, report_progress);
     let mut do_rename = true;
     let (parent_dir, mut dest, fname, tmp_path) = {
         let mut options = OpenOptions::new();
@@ -211,6 +258,7 @@ fn inner_main() -> i32 {
     let mut allow_weak_hashes = AllowWeakHashes::No;
     let mut allow_old_pkgs = false;
     let mut preserve_old_signature = false;
+    let mut report_progress = ReportProgress::No;
     let _ = match args.next() {
         Some(s) => s,
         None => return usage(false),
@@ -223,6 +271,7 @@ fn inner_main() -> i32 {
             b"--help" => return usage(true),
             b"--allow-old-pkgs" => allow_old_pkgs = true,
             b"--preserve-old-signature" => preserve_old_signature = true,
+            b"--report-progress" => report_progress = ReportProgress::Yes,
             b"--" => break,
             _ if bytes.starts_with(b"--dbpath=") && dbpath.is_none() => {
                 dbpath = Some(CString::new(&bytes[9..]).expect("NUL in command line banned"))
@@ -248,6 +297,7 @@ fn inner_main() -> i32 {
         allow_weak_hashes,
         allow_old_pkgs,
         preserve_old_signature,
+        report_progress,
         token,
     ) {
         Ok(()) => 0,
