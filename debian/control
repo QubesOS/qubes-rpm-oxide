@@ -1,0 +1,22 @@
+Source: qubes-rpm-oxide
+Maintainer: Demi Marie Obenour <demi@invisiblethingslab.com>
+Section: misc
+Priority: optional
+Standards-Version: 4.6.0.1
+Homepage: https://www.qubes-os.org
+Vcs-Git: https://github.com/QubesOS/qubes-rpm-oxide.git
+Build-Depends:
+ rustc,
+ cargo,
+ librpm-dev,
+ debhelper,
+ debhelper-compat (= 12),
+Description: RPM canonicalization and verification tools
+
+Package: qubes-rpm-oxide
+Architecture: all
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: RPM canonicalization and verification tools
+
