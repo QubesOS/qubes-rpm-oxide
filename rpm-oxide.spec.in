@@ -37,15 +37,21 @@ RPM canonicalization and verification tools
 
 %prep
 %setup -q
+
 %build
 RUSTFLAGS='-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now' RUSTC_BOOTSTRAP=1 cargo build --all-features --release
+
 %install
-install -D -m 0755 -- target/release/rpmcanon "$RPM_BUILD_ROOT"/%_bindir/rpmcanon
+install -D -m 0755 -- target/release/rpmcanon "$RPM_BUILD_ROOT"/%{_bindir}/rpmcanon
+
 %check
 RUSTC_BOOTSTRAP=1 cargo test --all-features --release -- --test-threads=1
+
 %clean
 rm -rf "$RPM_BUILD_ROOT" '%{name}-%{version}'
+
 %files
-%attr(755,root,root) /usr/bin/rpmcanon
+%attr(755,root,root) %{_bindir}/rpmcanon
+
 %changelog
 @CHANGELOG@
