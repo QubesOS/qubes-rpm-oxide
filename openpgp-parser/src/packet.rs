@@ -23,8 +23,6 @@ pub struct Packet<'a> {
 
 pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     let keybyte: u8 = reader.byte()?;
-    #[cfg(test)]
-    eprintln!("Keybyte is {}, reader length is {}", keybyte, reader.len());
     let len: usize = match keybyte {
         0...191 => keybyte.into(),
         192...223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
