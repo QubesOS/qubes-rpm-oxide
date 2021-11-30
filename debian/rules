@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export RUSTFLAGS=-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now
+export RUSTFLAGS=-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now --remap-path-prefix=$(PWD)=.
 export RUSTC_BOOTSTRAP=1
 
 override_dh_auto_build:
