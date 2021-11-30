@@ -5,11 +5,14 @@ export RUSTC_BOOTSTRAP=1
 
 override_dh_auto_build:
 	cargo build --all-features --release --offline
+
 override_dh_auto_install:
-	install -D -m 0755 -- target/release/rpmcanon debian/qubes-rpm-oxide/usr/bin/rpmcanon
-	dh_makeshlibs
-	dh_shlibdeps
+	dh_auto_install
+	install -D -m 0755 -- target/release/rpmcanon \
+		debian/qubes-rpm-oxide/usr/bin/rpmcanon
+
 override_dh_auto_clean:
 	cargo clean
+
 %:
 	dh $@
