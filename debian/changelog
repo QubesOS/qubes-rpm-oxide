@@ -1,3 +1,43 @@
+qubes-rpm-oxide (0.2.3-1) unstable; urgency=medium
+
+  [ Colin Walters ]
+  * rpm-parser: [clippy] Remove unnecessary clone()
+
+  [ Demi Marie Obenour ]
+  * Always produce new-format packets
+  * Add tests for the MPI reader
+  * Return correct error on unsupported signature versions
+  * Make docs for check_hash_algorithm match reality
+  * MD5 must never be used for signatures
+  * Reject expired signatures, not unexpired ones!
+  * Run rustfmt
+  * Avoid hard-coding binary signatures
+  * Fix building openpgp-parser #![no_std]
+  * Add documentation for the public key algorithm constants
+  * Add a bunch more tests
+  * Fix `alloc` feature
+  * Add way more packet serialization and parsing tests
+  * Add tests for old-format packet parsing
+  * Move rpmcanon’s canonicalization code to the library
+  * rustfmt
+  * Avoid using empty enums where not needed
+  * Fix bug in signature header validation
+  * Allow specifying a custom path to the rpmdb
+  * Remove useless cast
+  * Enable build for domU as well as dom0
+  * Add progress reporting support
+  * Debian packaging support
+
+  [ Frédéric Pierret (fepitre) ]
+  * spec: reformat and use %{_bindir} in %file
+  * debian: simplify dh_auto_install
+  * debian: make the build reproducible
+
+  [ Demi Marie Obenour ]
+  * Avoid using gobs of memory in unit-tests
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 12 Dec 2021 18:54:35 +0100
+
 qubes-rpm-oxide (0.2.2-1) unstable; urgency=high
 
   * Initial commit
