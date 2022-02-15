@@ -34,7 +34,7 @@ pub fn parse_header_magic<'a>(data: &[u8; 16]) -> Result<(u32, u32)> {
     Ok((index_length, data_length))
 }
 
-pub fn read_header(r: &mut Read) -> Result<(u32, u32)> {
+pub fn read_header_magic(r: &mut Read) -> Result<(u32, u32)> {
     #[cfg(any())]
     let _: [u8; 0] = [0u8; if size_of!(usize) >= size_of!(u32) {
         0
@@ -67,7 +67,7 @@ pub(super) fn load_header<'a>(
     cb: &mut FnMut(TagType, &TagData, &[u8]) -> Result<()>,
     is_signature: bool,
 ) -> Result<Header> {
-    let (index_length, data_length) = read_header(r)?;
+    let (index_length, data_length) = read_header_magic(r)?;
     let mut index = vec![Default::default(); index_length as _];
     let mut data = vec![0; data_length as _];
     {
@@ -81,7 +81,7 @@ pub(super) fn load_header<'a>(
         {
             bad_data!("bad region trailer location {:?}", region)
         }
-        let mut last_tag = region.tag();
+        let last_tag = region.tag();
         if last_tag != region_tag {
             bad_data!("bad region kind {}, expected {}", last_tag, region_tag)
         };
@@ -102,10 +102,23 @@ pub(super) fn load_header<'a>(
         }
         let mut cursor = 0;
         let mut reader = Reader::new(&data[..region_offset]);
-        last_tag = 99;
+        let mut last_tag = 99;
         for entry in &index[1..] {
             let tag = entry.tag();
-            fail_if!(tag <= last_tag, "entries not sorted");
+            if tag <= last_tag {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    if tag == last_tag {
+                        format!("consecutive entries with tag {}", tag)
+                    } else {
+                        format!(
+                            "entry with tag {} follows entry with greater count {}",
+                            tag, last_tag
+                        )
+                    },
+                ));
+            }
+            last_tag = tag;
             let &(ty, align, size) = match TAG_REGISTRY.get(entry.ty().wrapping_sub(1) as usize) {
                 None => bad_data!("Entry {:?} has an invalid type {}", entry, entry.ty()),
                 Some(s) => s,
@@ -195,5 +208,30 @@ mod tests {
                 .kind(),
             ErrorKind::InvalidData
         );
+    }
+
+    #[test]
+    fn does_not_parse_unsorted_header() {
+        let mut s: &[u8] = include_bytes!("../../../data/non_sorted_header.bin");
+        let msg = format!(
+            "{}",
+            load_header(&mut s, 62, &mut |_, _, _| Ok(()), true)
+                .map(drop)
+                .unwrap_err()
+        );
+        assert_eq!(
+            msg,
+            "entry with tag 268 follows entry with greater count 1007"
+        );
+        let mut s: &[u8] = include_bytes!("../../../data/duplicate_header.bin");
+        let msg = format!(
+            "{}",
+            load_header(&mut s, 62, &mut |_, _, _| Ok(()), true)
+                .map(drop)
+                .unwrap_err()
+        );
+        assert_eq!(msg, "consecutive entries with tag 1000");
+        let mut sorted: &[u8] = include_bytes!("../../../data/sorted_header.bin");
+        load_header(&mut sorted, 62, &mut |_, _, _| Ok(()), true).unwrap();
     }
 }

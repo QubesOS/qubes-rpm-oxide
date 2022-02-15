@@ -7,7 +7,7 @@ mod common;
 mod immutable;
 mod signature;
 use self::common::load_header;
-pub use self::common::{parse_header_magic, Header, RPM_HDRMAGIC};
+pub use self::common::{parse_header_magic, read_header_magic, Header, RPM_HDRMAGIC};
 pub use self::immutable::{load_immutable, ImmutableHeader};
 pub use self::signature::{load_signature, SignatureHeader};
 use std::io::Result;

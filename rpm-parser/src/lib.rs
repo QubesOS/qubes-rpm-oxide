@@ -71,7 +71,7 @@ mod verify;
 pub use ffi::TagType;
 pub use header::Header as RPMHeader;
 pub use header::{load_immutable, load_signature, parse_header_magic, RPM_HDRMAGIC};
-pub use header::{ImmutableHeader as MainHeader, SignatureHeader};
+pub use header::{read_header_magic, ImmutableHeader as MainHeader, SignatureHeader};
 pub use lead::{read_lead, RPMLead};
 pub use package::RPMPackage;
 pub use tagdata::TagData;
