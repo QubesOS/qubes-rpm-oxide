@@ -1,3 +1,10 @@
+qubes-rpm-oxide (0.2.4-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Forbid duplicate tags in packages
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 18 Feb 2022 03:34:28 +0100
+
 qubes-rpm-oxide (0.2.3-1) unstable; urgency=medium
 
   [ Colin Walters ]
