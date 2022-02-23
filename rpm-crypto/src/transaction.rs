@@ -7,10 +7,10 @@ struct Rpmts(u8);
 struct RpmKeyring_(u8);
 
 #[repr(C)]
-pub struct RpmTransactionSet(*mut Rpmts, InitToken);
+pub struct RpmTransactionSet(*mut Rpmts);
 
 #[repr(C)]
-pub struct RpmKeyring(*mut RpmKeyring_, InitToken);
+pub struct RpmKeyring(*mut RpmKeyring_);
 
 #[link(name = "rpm")]
 extern "C" {
@@ -24,28 +24,28 @@ extern "C" {
 
 impl Drop for RpmKeyring {
     fn drop(&mut self) {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         unsafe { rpmKeyringFree(self.0) };
     }
 }
 
 impl Clone for RpmKeyring {
     fn clone(&self) -> Self {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         unsafe { rpmKeyringLink(self.0) }
     }
 }
 
 impl Drop for RpmTransactionSet {
     fn drop(&mut self) {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         unsafe { rpmtsFree(self.0) };
     }
 }
 
 impl Clone for RpmTransactionSet {
     fn clone(&self) -> Self {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         unsafe { rpmtsLink(self.0) }
     }
 }
@@ -57,16 +57,21 @@ impl RpmTransactionSet {
     }
 
     pub fn keyring(&self) -> RpmKeyring {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         let ptr = unsafe { rpmtsGetKeyring(self.0, 1) };
         assert!(!ptr.is_null(), "keyring should have been autoloaded");
-        RpmKeyring(ptr, self.1)
+        RpmKeyring(ptr)
+    }
+
+    pub fn token(&self) -> InitToken {
+        // SAFETY: creating this object requires an InitToken
+        unsafe { InitToken::new() }
     }
 }
 
 impl RpmKeyring {
     pub fn validate_sig(&self, sig: Signature) -> Result<(), c_int> {
-        let _mutex = grab_mutex(self.1);
+        let _mutex = grab_mutex(self.token());
         #[link(name = "rpm")]
         extern "C" {
             fn rpmKeyringVerifySig(
@@ -79,5 +84,11 @@ impl RpmKeyring {
             0 => Ok(()),
             e => Err(e),
         }
+    }
+
+    pub fn token(&self) -> InitToken {
+        // SAFETY: creating this object requires an InitToken (via
+        // RpmTransactionSet)
+        unsafe { InitToken::new() }
     }
 }

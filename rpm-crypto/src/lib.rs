@@ -26,14 +26,21 @@ pub use init::{init, InitToken};
 
 mod init {
     use std;
-    static mut GLOBAL_MUTEX: Option<std::sync::Mutex<()>> = None;
+    static mut GLOBAL_MUTEX: *const std::sync::Mutex<()> = 0 as _;
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(C)]
-    pub struct InitToken(());
+    pub struct InitToken {
+        _unused: (),
+    }
+    impl InitToken {
+        /// SAFETY: one must know that the library is initialized
+        pub(super) unsafe fn new() -> Self {
+            InitToken { _unused: () }
+        }
+    }
     pub(super) fn grab_mutex<'a>(_token: InitToken) -> std::sync::MutexGuard<'a, ()> {
         // SAFETY: this is ordered after all writes to GLOBAL_MUTEX
-        unsafe { GLOBAL_MUTEX.as_ref() }
-            .expect("this is ordered after the mutex is initialized")
+        unsafe { &*GLOBAL_MUTEX }
             .lock()
             .expect("the code never panics while the mutex is held")
     }
@@ -41,7 +48,7 @@ mod init {
         unsafe extern "C" fn lock_at_exit() {
             if std::panic::catch_unwind(|| {
                 // SAFETY: this is ordered after all writes to GLOBAL_MUTEX
-                std::mem::forget(grab_mutex(InitToken(())));
+                std::mem::forget(grab_mutex(InitToken { _unused: () }));
             })
             .is_err()
             {
@@ -78,7 +85,7 @@ mod init {
         // Safety: the C function is called correctly.
         RPM_CRYPTO_INIT_ONCE.call_once(|| unsafe {
             // SAFETY: this is synchronized by call_once()
-            GLOBAL_MUTEX = Some(std::sync::Mutex::new(()));
+            GLOBAL_MUTEX = Box::into_raw(Box::new(std::sync::Mutex::new(())));
             assert_eq!(rpmReadConfigFiles(ptr::null(), ptr::null()), 0);
             if let Some(path) = path {
                 assert_eq!(
@@ -94,7 +101,7 @@ mod init {
             }
             assert_eq!(atexit(lock_at_exit), 0, "atexit() failed?");
         });
-        InitToken(())
+        InitToken { _unused: () }
     }
 }
 
