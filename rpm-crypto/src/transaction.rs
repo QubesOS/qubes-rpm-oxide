@@ -1,4 +1,4 @@
-use super::{DigestCtx, InitToken, RawSignature, Signature};
+use super::{grab_mutex, DigestCtx, InitToken, RawSignature, Signature};
 use std::os::raw::c_int;
 
 #[repr(C)]
@@ -7,10 +7,10 @@ struct Rpmts(u8);
 struct RpmKeyring_(u8);
 
 #[repr(C)]
-pub struct RpmTransactionSet(*mut Rpmts);
+pub struct RpmTransactionSet(*mut Rpmts, InitToken);
 
 #[repr(C)]
-pub struct RpmKeyring(*mut RpmKeyring_);
+pub struct RpmKeyring(*mut RpmKeyring_, InitToken);
 
 #[link(name = "rpm")]
 extern "C" {
@@ -24,42 +24,49 @@ extern "C" {
 
 impl Drop for RpmKeyring {
     fn drop(&mut self) {
+        let _mutex = grab_mutex(self.1);
         unsafe { rpmKeyringFree(self.0) };
     }
 }
 
 impl Clone for RpmKeyring {
     fn clone(&self) -> Self {
+        let _mutex = grab_mutex(self.1);
         unsafe { rpmKeyringLink(self.0) }
     }
 }
 
 impl Drop for RpmTransactionSet {
     fn drop(&mut self) {
+        let _mutex = grab_mutex(self.1);
         unsafe { rpmtsFree(self.0) };
     }
 }
 
 impl Clone for RpmTransactionSet {
     fn clone(&self) -> Self {
+        let _mutex = grab_mutex(self.1);
         unsafe { rpmtsLink(self.0) }
     }
 }
 
 impl RpmTransactionSet {
-    pub fn new(_: InitToken) -> Self {
+    pub fn new(token: InitToken) -> Self {
+        let _mutex = grab_mutex(token);
         unsafe { rpmtsCreate() }
     }
 
     pub fn keyring(&self) -> RpmKeyring {
+        let _mutex = grab_mutex(self.1);
         let ptr = unsafe { rpmtsGetKeyring(self.0, 1) };
         assert!(!ptr.is_null(), "keyring should have been autoloaded");
-        RpmKeyring(ptr)
+        RpmKeyring(ptr, self.1)
     }
 }
 
 impl RpmKeyring {
     pub fn validate_sig(&self, sig: Signature) -> Result<(), c_int> {
+        let _mutex = grab_mutex(self.1);
         #[link(name = "rpm")]
         extern "C" {
             fn rpmKeyringVerifySig(
