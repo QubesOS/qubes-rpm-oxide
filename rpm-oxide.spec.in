@@ -23,9 +23,9 @@ Vendor:		Invisible Things Lab
 License:	MIT OR Apache-2.0
 URL:		https://www.qubes-os.org
 
-BuildRequires:  rust
+BuildRequires:  rust >= 1.21
 BuildRequires:  cargo
-BuildRequires:  rpm-devel
+BuildRequires:  rpm-devel >= 4.14.2.1-4
 BuildRequires:  rust-debugger-common
 
 Requires:       rpm >= 4.14.2.1-4
