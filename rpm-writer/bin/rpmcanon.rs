@@ -22,7 +22,7 @@ extern crate rpm_parser;
 extern crate rpm_writer;
 
 use openpgp_parser::AllowWeakHashes;
-use rpm_crypto::transaction::RpmTransactionSet;
+use rpm_crypto::transaction::{RpmKeyring, RpmTransactionSet};
 use std::ffi::{CString, OsStr};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -103,7 +103,7 @@ mod progress_reader {
 use progress_reader::ReportProgress;
 
 fn process_file(
-    tx: &RpmTransactionSet,
+    keyring: &RpmKeyring,
     src: &std::ffi::OsStr,
     dst: &std::ffi::OsStr,
     allow_weak_hashes: AllowWeakHashes,
@@ -199,7 +199,7 @@ fn process_file(
         &mut s,
         &mut dest,
         allow_weak_hashes,
-        &tx.keyring(),
+        &keyring,
     )
     .map_err(|e| {
         if cfg!(not(target_os = "linux")) {
@@ -289,9 +289,15 @@ fn inner_main() -> i32 {
         return usage(false);
     }
     let (src, dst) = (args[0].clone(), args[1].clone());
-    let tx = RpmTransactionSet::new(token);
+    let keyring = match RpmTransactionSet::new(token) {
+        Ok(tx) => tx.keyring(),
+        Err(_) => {
+            eprintln!("Cannot load RPM keyring");
+            return 1;
+        }
+    };
     match process_file(
-        &tx,
+        &keyring,
         &src,
         &dst,
         allow_weak_hashes,
