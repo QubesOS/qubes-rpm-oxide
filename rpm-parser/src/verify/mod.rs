@@ -180,7 +180,8 @@ pub fn verify_package(
     copy(src, &mut validator)?;
     validator
         .validate(&keyring)
-        .map_err(|()| Error::new(ErrorKind::InvalidData, "Payload forged!"))?;
+        .map_err(|()| Error::new(ErrorKind::InvalidData,
+                                 "Package is corrupt - network problem?"))?;
     Ok(vfy_result)
 }
 
