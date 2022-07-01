@@ -1,7 +1,7 @@
 //! FFI code
 use std::os::raw::c_int;
 
-#[link(name = "rpm")]
+#[link(name = ":librpm.so.9")]
 extern "C" {
     fn rpmTagGetType(tag: c_int) -> c_int;
     fn rpmTagTypeGetClass(tag: c_int) -> c_int;

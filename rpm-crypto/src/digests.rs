@@ -20,7 +20,7 @@ extern "C" {
     fn free(ptr: *mut c_void);
 }
 
-#[link(name = "rpmio")]
+#[link(name = ":librpmio.so.9")]
 extern "C" {
     fn rpmDigestLength(tag: c_int) -> usize;
     fn rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
