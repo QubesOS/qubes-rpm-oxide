@@ -101,9 +101,6 @@ pub fn load_signature(
     let header = {
         let mut cb = |ty: TagType, tag_data: &TagData, body: &[u8]| {
             let tag = tag_data.tag();
-            if tag == 100 || ty == TagType::I18NString {
-                bad_data!("I18Nstring not permitted in signature header");
-            }
             let (_, expected_ty, size, flags, _) =
                 match RPM_SIG_TAGS.binary_search_by_key(&tag, |x| x.0) {
                     Ok(e) => RPM_SIG_TAGS[e],

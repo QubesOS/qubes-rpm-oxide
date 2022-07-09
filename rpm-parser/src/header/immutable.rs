@@ -84,17 +84,10 @@ pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader>
     let mut os = None;
     let mut source = true;
     let mut arch = None;
-    let mut i18n_length = None;
     let header = {
         let mut cb = |ty: TagType, tag_data: &TagData, body: &[u8]| -> Result<()> {
             let tag = tag_data.tag();
-            // 100 is I18NTable
-            if tag == 100 {
-                fail_if!(ty != TagType::StringArray, "Invalid I18NTable");
-                i18n_length = Some(tag_data.count());
-            } else {
-                fail_if!(tag < 1000, "signature in immutable header");
-            }
+            fail_if!(tag < 1000 && tag != 100, "signature in immutable header");
             fail_if!(tag > 0x7FFF, "type too large");
             match tag_type(tag) {
                 Some((t, _is_array)) if t == ty || (tag_class(t) == 2 && tag_class(ty) == 2) => {}
@@ -106,24 +99,6 @@ pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader>
                         t,
                         ty
                     )
-                }
-            }
-            if ty == TagType::I18NString {
-                match i18n_length {
-                    None => bad_data!(
-                        "No I18N table found, yet I18Nstring present: {:?}",
-                        tag_data
-                    ),
-                    Some(len) => {
-                        if len != tag_data.count() {
-                            bad_data!(
-                                "Bad length for i18nstring {:?}: expected {} but got {}",
-                                tag_data,
-                                len,
-                                tag_data.count()
-                            )
-                        }
-                    }
                 }
             }
             match tag {
