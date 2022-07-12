@@ -12,7 +12,7 @@ pub struct RpmTransactionSet(*mut Rpmts);
 #[repr(C)]
 pub struct RpmKeyring(*mut RpmKeyring_);
 
-#[link(name = "rpm")]
+#[link(name = ":librpm.so.9")]
 extern "C" {
     fn rpmtsCreate() -> RpmTransactionSet;
     fn rpmKeyringLink(Keyring: *mut RpmKeyring_) -> RpmKeyring;
@@ -72,7 +72,7 @@ impl RpmTransactionSet {
 impl RpmKeyring {
     pub fn validate_sig(&self, sig: Signature) -> Result<(), c_int> {
         let _mutex = grab_mutex(self.token());
-        #[link(name = "rpm")]
+        #[link(name = ":librpm.so.9")]
         extern "C" {
             fn rpmKeyringVerifySig(
                 keyring: *mut RpmKeyring_,

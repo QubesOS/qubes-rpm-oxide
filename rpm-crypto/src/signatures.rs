@@ -58,7 +58,7 @@ impl Drop for Signature {
     }
 }
 
-#[link(name = "rpmio")]
+#[link(name = ":librpmio.so.9")]
 extern "C" {
     fn pgpPrtParams(pkts: *const u8, pktlen: usize, pkttype: c_uint, ret: &mut Signature) -> c_int;
     fn pgpDigParamsFree(digp: *mut RpmPgpDigParams) -> *mut RpmPgpDigParams;

@@ -61,7 +61,7 @@ mod init {
         static RPM_CRYPTO_INIT_ONCE: Once = ONCE_INIT;
         use std::os::raw::{c_char, c_int, c_void};
         use std::ptr;
-        #[link(name = "rpm")]
+        #[link(name = ":librpm.so.9")]
         extern "C" {
             fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
         }
@@ -70,7 +70,7 @@ mod init {
             fn abort() -> !;
             fn atexit(_: unsafe extern "C" fn()) -> c_int;
         }
-        #[link(name = "rpmio")]
+        #[link(name = ":librpmio.so.9")]
         extern "C" {
             fn rpmPushMacro(
                 mc: *mut c_void,
