@@ -1,3 +1,24 @@
+qubes-rpm-oxide (0.2.5-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Serialize all calls to RPM keyring and transaction functions
+  * Fix build on old Rust versions
+  * Specify the minimum supported Rust and RPM versions
+  * Check that i18nstrings are valid and consistent
+  * Better error messages for corrupt packages
+
+  [ Marek Marczykowski-Górecki ]
+  * Revert "Check that i18nstrings are valid and consistent"
+
+  [ Frédéric Pierret (fepitre) ]
+  * Add Qubes Builder v2 integration
+  * .qubesbuilder: replace 'spec' by 'build'
+
+  [ Demi Marie Obenour ]
+  * Remove a huge amount of unnecessary locking
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Tue, 19 Jul 2022 18:04:41 +0200
+
 qubes-rpm-oxide (0.2.4-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
