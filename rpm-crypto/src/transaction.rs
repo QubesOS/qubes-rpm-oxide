@@ -12,6 +12,10 @@ pub struct RpmTransactionSet(*mut Rpmts);
 #[repr(C)]
 pub struct RpmKeyring(*mut RpmKeyring_);
 
+// RPM keyrings are synchronized by librpm
+unsafe impl Send for RpmKeyring {}
+unsafe impl Sync for RpmKeyring {}
+
 #[link(name = "rpm")]
 extern "C" {
     fn rpmtsCreate() -> RpmTransactionSet;
@@ -24,14 +28,12 @@ extern "C" {
 
 impl Drop for RpmKeyring {
     fn drop(&mut self) {
-        let _mutex = grab_mutex(self.token());
         unsafe { rpmKeyringFree(self.0) };
     }
 }
 
 impl Clone for RpmKeyring {
     fn clone(&self) -> Self {
-        let _mutex = grab_mutex(self.token());
         unsafe { rpmKeyringLink(self.0) }
     }
 }
@@ -51,15 +53,23 @@ impl Clone for RpmTransactionSet {
 }
 
 impl RpmTransactionSet {
-    pub fn new(token: InitToken) -> Self {
+    pub fn new(token: InitToken) -> Result<Self, ()> {
         let _mutex = grab_mutex(token);
-        unsafe { rpmtsCreate() }
+        let v = unsafe { rpmtsCreate() };
+        let keyring = RpmKeyring(unsafe { rpmtsGetKeyring(v.0, 1) });
+        if keyring.0.is_null() {
+            Err(())
+        } else {
+            Ok(v)
+        }
     }
 
     pub fn keyring(&self) -> RpmKeyring {
-        let _mutex = grab_mutex(self.token());
-        let ptr = unsafe { rpmtsGetKeyring(self.0, 1) };
-        assert!(!ptr.is_null(), "keyring should have been autoloaded");
+        let ptr = unsafe { rpmtsGetKeyring(self.0, 0) };
+        assert!(
+            !ptr.is_null(),
+            "keyring should have been autoloaded in new()"
+        );
         RpmKeyring(ptr)
     }
 
@@ -71,7 +81,6 @@ impl RpmTransactionSet {
 
 impl RpmKeyring {
     pub fn validate_sig(&self, sig: Signature) -> Result<(), c_int> {
-        let _mutex = grab_mutex(self.token());
         #[link(name = "rpm")]
         extern "C" {
             fn rpmKeyringVerifySig(

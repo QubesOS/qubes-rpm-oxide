@@ -115,7 +115,6 @@ impl Signature {
         allow_weak_hashes: AllowWeakHashes,
         token: InitToken,
     ) -> Result<Self, Error> {
-        let _mutex = init::grab_mutex(token);
         let sig = RawSignature::parse(untrusted_buffer, time, allow_weak_hashes, token)?;
         let ctx = DigestCtx::init(sig.hash_algorithm(), allow_weak_hashes, token)
             .expect("Digest algorithm already validated");
