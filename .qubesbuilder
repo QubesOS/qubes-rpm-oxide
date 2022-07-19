@@ -1,0 +1,11 @@
+host:
+  rpm:
+    build:
+    - rpm-oxide.spec
+vm:
+  rpm:
+    build:
+    - rpm-oxide.spec
+  deb:
+    build:
+    - debian
