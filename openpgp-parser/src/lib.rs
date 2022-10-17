@@ -21,7 +21,7 @@
 ))]
 compile_error!("build script bug");
 
-pub use buffer::{EOFError, Reader};
+pub use crate::buffer::{EOFError, Reader};
 mod buffer;
 pub mod packet;
 pub mod signature;
@@ -29,7 +29,7 @@ pub mod signature;
 #[cfg(target_pointer_width = "16")]
 compile_error!("Sorry, 16-bit targets not supported");
 
-pub use signature::AllowWeakHashes;
+pub use crate::signature::AllowWeakHashes;
 
 /// Errors that can occur during parsing
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

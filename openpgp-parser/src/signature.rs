@@ -1,7 +1,7 @@
 //! OpenPGP signatures
 
 use super::{packet, Error, Reader};
-use packet::get_varlen_bytes;
+use crate::packet::get_varlen_bytes;
 
 extern crate core;
 
