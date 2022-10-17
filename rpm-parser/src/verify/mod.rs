@@ -55,7 +55,7 @@ pub fn verify_package(
     output: Option<&mut dyn Write>,
 ) -> std::io::Result<VerifyResult> {
     use self::validator::Validator;
-    let mut validator: Validator = Validator::new(None);
+    let mut validator: Validator<'_> = Validator::new(None);
     let mut header_payload_sig = None;
     let mut header_payload_weak_digest = None;
     if let Some((sig, s_bytes)) = sig_header.header_payload_signature.take() {

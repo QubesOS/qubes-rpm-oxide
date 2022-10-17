@@ -1,9 +1,9 @@
 //! OpenPGP signatures
 
 use super::{packet, Error, Reader};
-use packet::get_varlen_bytes;
+use crate::packet::get_varlen_bytes;
 
-extern crate core;
+use core;
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 /// Should weak hashes (less than 256 bits and vulnerable to collisions) be allowed?
@@ -357,7 +357,7 @@ fn parse_packet_body<'a>(
         creation_time: None,
         expiration_time: None,
     };
-    let check_sig_type = |reader: &mut Reader| {
+    let check_sig_type = |reader: &mut Reader<'_>| {
         let actual_type = reader.byte()?;
         if actual_type == expected_type as u8 {
             Ok(())
@@ -588,7 +588,7 @@ mod tests {
     }
     #[test]
     fn mpi_too_short() {
-        let mut buf: Reader = Reader::new(b"\x00\x09\xFF");
+        let mut buf: Reader<'_> = Reader::new(b"\x00\x09\xFF");
         assert_eq!(buf.len(), 3);
         assert_eq!(read_mpi(&mut buf).unwrap_err(), Error::PrematureEOF);
         assert_eq!(buf.len(), 3);
@@ -597,7 +597,7 @@ mod tests {
     fn mpi_invalid() {
         for i in 0..255 {
             let s = &[0, i, 0x7F, 0x00];
-            let mut buf: Reader = Reader::new(s);
+            let mut buf: Reader<'_> = Reader::new(s);
             assert_eq!(buf.len(), 4);
             if i == 7 {
                 read_mpi(&mut buf).unwrap();

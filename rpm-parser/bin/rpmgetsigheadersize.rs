@@ -1,4 +1,4 @@
-extern crate rpm_parser;
+use rpm_parser;
 
 fn main() {
     let mut args = std::env::args_os();

@@ -1,11 +1,8 @@
 #![feature(rustc_private)] // hack hack
 #![feature(libc)]
+#![forbid(ellipsis_inclusive_range_patterns, bare_trait_objects)]
 
 extern crate libc;
-extern crate openpgp_parser;
-extern crate rpm_crypto;
-extern crate rpm_parser;
-extern crate rpm_writer;
 
 use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::{RpmKeyring, RpmTransactionSet};
@@ -44,11 +41,11 @@ fn usage(success: bool) -> i32 {
 
 mod progress_reader {
     use std;
+    use std::fs::File;
     pub enum ReportProgress {
         No,
         Yes,
     }
-    use File;
     pub struct ProgressReportingReader {
         inner: File,
         do_report: Option<u64>,

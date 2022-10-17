@@ -3,9 +3,9 @@
 //! This includes a full RPMv4 package emitter.  It is implemented in Rust to
 //! the extent possible, instead of using librpm.
 
-extern crate openpgp_parser;
-extern crate rpm_crypto;
-extern crate rpm_parser;
+use openpgp_parser;
+use rpm_crypto;
+use rpm_parser;
 use rpm_parser::TagData;
 use std::collections::BTreeMap;
 use std::ffi::CStr;
