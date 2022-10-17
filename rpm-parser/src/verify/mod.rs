@@ -45,14 +45,14 @@ pub struct VerifyResult {
 /// - `output`: Output stream that receives the (not yet validated!) bytes, for
 ///   streaming support.
 pub fn verify_package(
-    src: &mut Read,
+    src: &mut dyn Read,
     sig_header: &mut SignatureHeader,
     keyring: &RpmKeyring,
     allow_old_pkgs: bool,
     preserve_old_sig: bool,
     token: InitToken,
-    mut cb: Option<&mut FnMut(&VerifyResult, Option<&mut Write>) -> Result<()>>,
-    output: Option<&mut Write>,
+    mut cb: Option<&mut dyn FnMut(&VerifyResult, Option<&mut dyn Write>) -> Result<()>>,
+    output: Option<&mut dyn Write>,
 ) -> std::io::Result<VerifyResult> {
     use self::validator::Validator;
     let mut validator: Validator = Validator::new(None);
@@ -178,10 +178,12 @@ pub fn verify_package(
     }
     drop(cb);
     copy(src, &mut validator)?;
-    validator
-        .validate(&keyring)
-        .map_err(|()| Error::new(ErrorKind::InvalidData,
-                                 "Package is corrupt - network problem?"))?;
+    validator.validate(&keyring).map_err(|()| {
+        Error::new(
+            ErrorKind::InvalidData,
+            "Package is corrupt - network problem?",
+        )
+    })?;
     Ok(vfy_result)
 }
 

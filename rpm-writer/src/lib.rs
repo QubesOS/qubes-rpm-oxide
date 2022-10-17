@@ -3,16 +3,12 @@
 //! This includes a full RPMv4 package emitter.  It is implemented in Rust to
 //! the extent possible, instead of using librpm.
 
-#![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
 #![cfg_attr(
     ellipsis_inclusive_range_deprecated,
     allow(ellipsis_inclusive_range_patterns)
 )]
 
-#[cfg(any(
-    not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
-    not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
-))]
+#[cfg(any(not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),))]
 compile_error!("build script bug");
 extern crate openpgp_parser;
 extern crate rpm_crypto;
@@ -100,7 +96,7 @@ impl<'a> HeaderEntry<'a> {
             &HeaderEntry::I18NTable(_) => 9,
         }
     }
-    pub fn write_bytes(&self, w: &mut Write) -> std::io::Result<()> {
+    pub fn write_bytes(&self, w: &mut dyn Write) -> std::io::Result<()> {
         match self {
             &HeaderEntry::Char(e) | &HeaderEntry::U8(e) | &HeaderEntry::Bin(e) => w.write_all(e),
             &HeaderEntry::String(e) => w.write_all(CStr::to_bytes_with_nul(e)),
@@ -181,7 +177,7 @@ impl<'a> HeaderBuilder<'a> {
             .iter()
             .fold(16, |len, entry| entry.1.advance_length(len) + entry.1.len())
     }
-    pub fn emit(&self, t: &mut Write) -> std::io::Result<()> {
+    pub fn emit(&self, t: &mut dyn Write) -> std::io::Result<()> {
         let (dl, il) = (self.len(), self.data.len() + 1);
         let res = [
             TagData::new(0x8eade801, 0, il as _, dl as _),
@@ -236,7 +232,7 @@ fn emit_header(
         ref main_header_sha256_hash,
         ref header_payload_weak_digest,
     }: &rpm_parser::VerifyResult,
-    mut dest: Option<&mut std::io::Write>,
+    mut dest: Option<&mut dyn std::io::Write>,
     _allow_weak_hashes: openpgp_parser::AllowWeakHashes,
     _token: rpm_crypto::InitToken,
 ) -> std::io::Result<()> {
@@ -281,14 +277,14 @@ pub fn canonicalize_package(
     allow_old_pkgs: bool,
     preserve_old_signature: bool,
     token: rpm_crypto::InitToken,
-    source: &mut std::io::Read,
-    dest: &mut std::io::Write,
+    source: &mut dyn std::io::Read,
+    dest: &mut dyn std::io::Write,
     allow_weak_hashes: openpgp_parser::AllowWeakHashes,
     keyring: &rpm_crypto::transaction::RpmKeyring,
 ) -> std::io::Result<rpm_parser::VerifyResult> {
-    let mut emit_header: &mut FnMut(
+    let mut emit_header: &mut dyn FnMut(
         &rpm_parser::VerifyResult,
-        Option<&mut std::io::Write>,
+        Option<&mut dyn std::io::Write>,
     ) -> std::io::Result<()> = &mut |x, y| emit_header(x, y, allow_weak_hashes, token);
     // Ignore the lead
     let _ = rpm_parser::read_lead(source)?;

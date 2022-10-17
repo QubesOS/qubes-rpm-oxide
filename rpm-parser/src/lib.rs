@@ -7,16 +7,12 @@
 //! features can be found in the `rpm` crate, which uses the system RPM library.
 
 // #![deny(warnings)]
-#![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
 #![cfg_attr(
     ellipsis_inclusive_range_deprecated,
     allow(ellipsis_inclusive_range_patterns)
 )]
 
-#[cfg(any(
-    not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
-    not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
-))]
+#[cfg(any(not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),))]
 compile_error!("build script bug");
 
 macro_rules! size_of {

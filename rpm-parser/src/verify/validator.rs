@@ -32,7 +32,7 @@ impl Verifyable {
 
 pub(super) struct Validator<'a> {
     objects: Vec<Verifyable>,
-    output: Option<&'a mut Write>,
+    output: Option<&'a mut dyn Write>,
 }
 
 impl<'a> Write for Validator<'a> {
@@ -57,7 +57,7 @@ impl<'a> Write for Validator<'a> {
 
 impl<'a> Validator<'a> {
     /// Creates a [`Validator`]
-    pub(super) fn new(output: Option<&'a mut Write>) -> Self {
+    pub(super) fn new(output: Option<&'a mut dyn Write>) -> Self {
         Self {
             objects: vec![],
             output,
@@ -68,7 +68,10 @@ impl<'a> Validator<'a> {
     /// untrusted at this point.
     ///
     /// Returns the old writer.
-    pub(super) fn set_output(&mut self, output: Option<&'a mut Write>) -> Option<&'a mut Write> {
+    pub(super) fn set_output(
+        &mut self,
+        output: Option<&'a mut dyn Write>,
+    ) -> Option<&'a mut dyn Write> {
         std::mem::replace(&mut self.output, output)
     }
 

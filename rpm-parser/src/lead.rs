@@ -107,7 +107,7 @@ impl RPMLead {
     }
 }
 
-pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
+pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
     let lead = {
         let mut s: [u8; 96] = [0u8; size_of::<RPMLead>()];
         r.read_exact(&mut s[..])?;
