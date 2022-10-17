@@ -9,7 +9,6 @@ fn main() {
         .unwrap();
     assert!(output.status.success(), "`rustc --version` failed");
     let version = String::from_utf8(output.stdout).expect("rustc wrote invalid UTF-8?");
-    let mut try_from_unstable = false;
     let mut ellipsis_inclusive_range_deprecated = true;
     let mut bare_trait_obj_deprecated = true;
     let mut alloc_crate_unstable = false;
@@ -17,17 +16,11 @@ fn main() {
         let version = &version[8..];
         if let Some(period) = version.find('.') {
             if let Ok(vnum) = version[..period].parse::<u32>() {
-                try_from_unstable = vnum < 34;
                 alloc_crate_unstable = vnum < 36;
                 bare_trait_obj_deprecated = vnum >= 37;
                 ellipsis_inclusive_range_deprecated = vnum >= 37;
             }
         }
-    }
-    if try_from_unstable {
-        println!("cargo:rustc-cfg=try_from_unstable");
-    } else {
-        println!("cargo:rustc-cfg=try_from_stable");
     }
     if bare_trait_obj_deprecated {
         println!("cargo:rustc-cfg=bare_trait_obj_deprecated");
