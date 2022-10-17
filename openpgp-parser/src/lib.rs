@@ -11,12 +11,10 @@
 )]
 #![forbid(missing_docs, unsafe_code, deprecated)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
-#![cfg_attr(alloc_crate_unstable, feature(alloc))]
 
 #[cfg(any(
     not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
     not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
-    not(any(alloc_crate_stable, alloc_crate_unstable)),
 ))]
 compile_error!("build script bug");
 
