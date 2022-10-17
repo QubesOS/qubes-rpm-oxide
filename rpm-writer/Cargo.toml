@@ -4,7 +4,6 @@ version = "0.2.2"
 authors = ["Demi Marie Obenour <demi@invisiblethingslab.com>"]
 # edition = "2018"
 license = "MIT OR Apache-2.0"
-build = "../rpm-parser/build.rs"
 
 [dependencies]
 rpm-parser = { version = "0.2.2", path = "../rpm-parser" }

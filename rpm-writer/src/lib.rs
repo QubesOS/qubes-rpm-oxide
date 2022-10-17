@@ -3,13 +3,6 @@
 //! This includes a full RPMv4 package emitter.  It is implemented in Rust to
 //! the extent possible, instead of using librpm.
 
-#![cfg_attr(
-    ellipsis_inclusive_range_deprecated,
-    allow(ellipsis_inclusive_range_patterns)
-)]
-
-#[cfg(any(not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),))]
-compile_error!("build script bug");
 extern crate openpgp_parser;
 extern crate rpm_crypto;
 extern crate rpm_parser;

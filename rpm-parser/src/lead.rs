@@ -124,7 +124,7 @@ pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
     let mut seen_nul = false;
     for &i in &lead.name[..] {
         match i {
-            b'A'...b'Z' | b'a'...b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'...b'9'
+            b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b':' | b'0'..=b'9'
                 if !seen_nul => {}
             b'\0' => seen_nul = true,
             _ => bad_data!("invalid package name"),

@@ -7,14 +7,6 @@
 //! features can be found in the `rpm` crate, which uses the system RPM library.
 
 // #![deny(warnings)]
-#![cfg_attr(
-    ellipsis_inclusive_range_deprecated,
-    allow(ellipsis_inclusive_range_patterns)
-)]
-
-#[cfg(any(not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),))]
-compile_error!("build script bug");
-
 macro_rules! size_of {
     ($t:ty) => {
         $crate::std::mem::size_of::<$t>()

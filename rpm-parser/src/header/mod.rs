@@ -24,7 +24,7 @@ fn check_hex(untrusted_body: &[u8]) -> Result<()> {
     fail_if!(untrusted_body[len] != b'\0', "missing NUL terminator");
     for &i in &untrusted_body[..len] {
         match i {
-            b'a'...b'f' | b'0'...b'9' => (),
+            b'a'..=b'f' | b'0'..=b'9' => (),
             _ => bad_data!("bad hex"),
         }
     }

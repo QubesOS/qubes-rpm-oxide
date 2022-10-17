@@ -1,12 +1,5 @@
 #![feature(rustc_private)] // hack hack
 #![feature(libc)]
-#![cfg_attr(
-    ellipsis_inclusive_range_deprecated,
-    allow(ellipsis_inclusive_range_patterns)
-)]
-
-#[cfg(any(not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),))]
-compile_error!("build script bug");
 
 extern crate libc;
 extern crate openpgp_parser;
