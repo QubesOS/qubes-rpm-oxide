@@ -10,3 +10,9 @@ build = "../rpm-parser/build.rs"
 [features]
 std = ["alloc"]
 alloc = []
+bin = []
+
+[[bin]]
+name = "sigparse"
+path = "bin/sigparse.rs"
+required-features = ["bin"]
