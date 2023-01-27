@@ -1,3 +1,21 @@
+qubes-rpm-oxide (0.2.6-1) unstable; urgency=medium
+
+  [ Marek Marczykowski-Górecki ]
+  * Allow ^ in package name
+  * Add 'sigparse' binary for checking if signature is well formed
+  * ci: drop R4.0
+
+  [ Demi Marie Obenour ]
+  * Drop support for rustc < 1.32
+  * Drop support for rustc < 1.34
+  * Drop support for rustc < 1.36
+  * Drop support for compilers without `dyn Trait`
+  * Stop using ... for inclusive ranges
+  * Migrate to 2018 edition
+  * Drop R4.0 CI
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Fri, 27 Jan 2023 17:32:38 +0100
+
 qubes-rpm-oxide (0.2.5-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
