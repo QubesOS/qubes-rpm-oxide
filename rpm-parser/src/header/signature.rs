@@ -82,7 +82,7 @@ pub struct SignatureHeader {
 }
 
 pub fn load_signature(
-    r: &mut Read,
+    r: &mut dyn Read,
     allow_weak_hashes: AllowWeakHashes,
     token: rpm_crypto::InitToken,
 ) -> Result<SignatureHeader> {

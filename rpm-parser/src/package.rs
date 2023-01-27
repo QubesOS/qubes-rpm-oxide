@@ -22,7 +22,7 @@ include!("tables.rs");
 impl RPMPackage {
     /// Load a package from `r`
     pub fn read(
-        r: &mut Read,
+        r: &mut dyn Read,
         allow_weak_hashes: AllowWeakHashes,
         token: InitToken,
     ) -> Result<Self> {

@@ -2,9 +2,8 @@
 name = "rpm-parser"
 version = "0.2.2"
 authors = ["Demi Marie Obenour <athena@invisiblethingslab.com>"]
-# edition = "2018"
+edition = "2018"
 license = "MIT OR Apache-2.0"
-build = "build.rs"
 
 [dependencies]
 openpgp-parser = { path = "../openpgp-parser", version = "0.2.2", features = ["std"] }

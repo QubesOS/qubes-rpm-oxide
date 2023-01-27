@@ -7,13 +7,13 @@
 #![forbid(improper_ctypes)]
 
 use openpgp_parser::{AllowWeakHashes, Error};
-extern crate openpgp_parser;
+
 
 mod digests;
 mod signatures;
 pub mod transaction;
-pub use digests::{rpm_hash_len, DigestCtx};
-pub use signatures::Signature as RawSignature;
+pub use crate::digests::{rpm_hash_len, DigestCtx};
+pub use crate::signatures::Signature as RawSignature;
 
 /// An OpenPGP signature
 pub struct Signature {
@@ -21,8 +21,8 @@ pub struct Signature {
     ctx: DigestCtx,
 }
 
-use init::grab_mutex;
-pub use init::{init, InitToken};
+use crate::init::grab_mutex;
+pub use crate::init::{init, InitToken};
 
 mod init {
     use std;

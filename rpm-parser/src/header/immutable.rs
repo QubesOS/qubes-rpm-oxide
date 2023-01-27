@@ -74,7 +74,7 @@ impl ImmutableHeader {
     }
 }
 
-pub fn load_immutable(r: &mut Read, token: InitToken) -> Result<ImmutableHeader> {
+pub fn load_immutable(r: &mut dyn Read, token: InitToken) -> Result<ImmutableHeader> {
     let mut payload_digest_algorithm = None;
     let mut payload_digest: Option<Vec<u8>> = None;
     let mut name: Option<String> = None;

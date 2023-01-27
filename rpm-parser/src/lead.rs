@@ -107,7 +107,7 @@ impl RPMLead {
     }
 }
 
-pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
+pub fn read_lead(r: &mut dyn Read) -> Result<RPMLead> {
     let lead = {
         let mut s: [u8; 96] = [0u8; size_of::<RPMLead>()];
         r.read_exact(&mut s[..])?;
@@ -124,7 +124,7 @@ pub fn read_lead(r: &mut Read) -> Result<RPMLead> {
     let mut seen_nul = false;
     for &i in &lead.name[..] {
         match i {
-            b'A'...b'Z' | b'a'...b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b'^' | b':' | b'0'...b'9'
+            b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'-' | b'_' | b'+' | b'~' | b'^' | b':' | b'0'..=b'9'
                 if !seen_nul => {}
             b'\0' => seen_nul = true,
             _ => bad_data!("invalid package name"),

@@ -34,7 +34,7 @@ pub fn parse_header_magic<'a>(data: &[u8; 16]) -> Result<(u32, u32)> {
     Ok((index_length, data_length))
 }
 
-pub fn read_header_magic(r: &mut Read) -> Result<(u32, u32)> {
+pub fn read_header_magic(r: &mut dyn Read) -> Result<(u32, u32)> {
     #[cfg(any())]
     let _: [u8; 0] = [0u8; if size_of!(usize) >= size_of!(u32) {
         0
@@ -62,9 +62,9 @@ const TAG_REGISTRY: &[(TagType, usize, Option<usize>)] = &[
 ];
 
 pub(super) fn load_header<'a>(
-    r: &mut Read,
+    r: &mut dyn Read,
     region_tag: u32,
-    cb: &mut FnMut(TagType, &TagData, &[u8]) -> Result<()>,
+    cb: &mut dyn FnMut(TagType, &TagData, &[u8]) -> Result<()>,
     is_signature: bool,
 ) -> Result<Header> {
     let (index_length, data_length) = read_header_magic(r)?;

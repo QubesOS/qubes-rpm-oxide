@@ -24,8 +24,8 @@ pub struct Packet<'a> {
 pub(crate) fn get_varlen_bytes<'a>(reader: &mut Reader<'a>) -> Result<&'a [u8], Error> {
     let keybyte: u8 = reader.byte()?;
     let len: usize = match keybyte {
-        0...191 => keybyte.into(),
-        192...223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
+        0..=191 => keybyte.into(),
+        192..=223 => ((usize::from(keybyte) - 192) << 8) + usize::from(reader.byte()?) + 192,
         255 => reader.be_u32()? as _,
         // Partial lengths are deliberately unsupported, as we don’t handle PGP signed and/or
         // encrypted data ourselves.
@@ -91,14 +91,14 @@ impl<'a> Packet<'a> {
         assert!(u64::from(u32::max_value()) >= len as u64);
         let tag_byte = self.tag | 0b1100_0000u8;
         let mut v = match len {
-            0...191 => {
+            0..=191 => {
                 // 1-byte
                 let mut v = alloc::vec::Vec::with_capacity(2 + len);
                 v.push(tag_byte);
                 v.push(len as u8);
                 v
             }
-            192...8383 => {
+            192..=8383 => {
                 // 2-byte
                 let mut v = alloc::vec::Vec::with_capacity(3 + len);
                 let len = len - 192;

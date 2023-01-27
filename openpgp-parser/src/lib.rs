@@ -4,24 +4,10 @@
 //! no cryptography of its own, and is instead designed to validate packets that
 //! will be passed to a different OpenPGP implementation.
 
-#![cfg_attr(bare_trait_obj_deprecated, allow(bare_trait_objects))]
-#![cfg_attr(
-    ellipsis_inclusive_range_deprecated,
-    allow(ellipsis_inclusive_range_patterns)
-)]
 #![forbid(missing_docs, unsafe_code, deprecated)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
-#![cfg_attr(alloc_crate_unstable, feature(alloc))]
 
-#[cfg(any(
-    not(any(const_fn_stable, const_fn_unstable)),
-    not(any(bare_trait_obj_deprecated, bare_trait_obj_allowed)),
-    not(any(ellipsis_inclusive_range_deprecated, ellipsis_inclusive_range_allowed)),
-    not(any(alloc_crate_stable, alloc_crate_unstable)),
-))]
-compile_error!("build script bug");
-
-pub use buffer::{EOFError, Reader};
+pub use crate::buffer::{EOFError, Reader};
 mod buffer;
 pub mod packet;
 pub mod signature;
@@ -29,7 +15,7 @@ pub mod signature;
 #[cfg(target_pointer_width = "16")]
 compile_error!("Sorry, 16-bit targets not supported");
 
-pub use signature::AllowWeakHashes;
+pub use crate::signature::AllowWeakHashes;
 
 /// Errors that can occur during parsing
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
