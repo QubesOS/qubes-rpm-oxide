@@ -1,11 +1,6 @@
 //! FFI code
-use std::os::raw::c_int;
-
-#[link(name = "rpm")]
-extern "C" {
-    fn rpmTagGetType(tag: c_int) -> c_int;
-    fn rpmTagTypeGetClass(tag: c_int) -> c_int;
-}
+use rpm_crypto::{qubes_rpm_rpmTagGetType, qubes_rpm_rpmTagTypeGetClass};
+use std::os::raw::c_uint;
 
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -25,7 +20,7 @@ pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
     if tag > 0x7FFF {
         return None;
     }
-    let ty = unsafe { rpmTagGetType(tag as _) };
+    let ty = unsafe { qubes_rpm_rpmTagGetType(tag as _) };
     let is_array = match ty as u32 & 0xffff_0000 {
         0x10000 => false,
         0x20000 => true,
@@ -57,8 +52,8 @@ pub fn tag_type(tag: u32) -> Option<(TagType, bool)> {
     ))
 }
 
-pub fn tag_class(ty: TagType) -> c_int {
-    unsafe { rpmTagTypeGetClass(ty as _) }
+pub fn tag_class(ty: TagType) -> c_uint {
+    unsafe { qubes_rpm_rpmTagTypeGetClass(ty as _) }
 }
 
 #[cfg(test)]

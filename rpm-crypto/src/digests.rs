@@ -12,7 +12,7 @@ pub struct DigestCtx(*mut ExternDigestCtx);
 
 pub fn rpm_hash_len(alg: i32) -> usize {
     // SAFETY: this code is called correctly (and has 100% input coverage in the testsuite)
-    unsafe { rpmDigestLength(alg) }
+    unsafe { qubes_rpm_rpmDigestLength(alg) }
 }
 
 #[link(name = "c")]
@@ -20,13 +20,13 @@ extern "C" {
     fn free(ptr: *mut c_void);
 }
 
-#[link(name = "rpmio")]
 extern "C" {
-    fn rpmDigestLength(tag: c_int) -> usize;
-    fn rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
-    fn rpmDigestInit(hash_algo: c_int, flags: u32) -> DigestCtx;
-    fn rpmDigestUpdate(s: *mut ExternDigestCtx, data: *const c_void, len: usize) -> c_int;
-    fn rpmDigestFinal(
+    fn qubes_rpm_rpmDigestLength(tag: c_int) -> usize;
+    fn qubes_rpm_rpmDigestDup(s: *mut ExternDigestCtx) -> DigestCtx;
+    fn qubes_rpm_rpmDigestInit(hash_algo: c_int, flags: u32) -> DigestCtx;
+    fn qubes_rpm_rpmDigestUpdate(s: *mut ExternDigestCtx, data: *const c_void, len: usize)
+        -> c_int;
+    fn qubes_rpm_rpmDigestFinal(
         ctx: *mut ExternDigestCtx,
         datap: Option<&mut *mut c_void>,
         lenp: Option<&mut usize>,
@@ -37,14 +37,14 @@ extern "C" {
 impl Drop for DigestCtx {
     fn drop(&mut self) {
         // SAFETY: `self.0` is a pointer to an RPM digest context.
-        unsafe { rpmDigestFinal(self.0, None, None, 0) };
+        unsafe { qubes_rpm_rpmDigestFinal(self.0, None, None, 0) };
     }
 }
 
 impl Clone for DigestCtx {
     fn clone(&self) -> Self {
         // SAFETY: `self.0` is a pointer to an RPM digest context.
-        unsafe { rpmDigestDup(self.0) }
+        unsafe { qubes_rpm_rpmDigestDup(self.0) }
     }
 }
 
@@ -72,7 +72,7 @@ impl DigestCtx {
             return Err(());
         }
         // SAFETY: `rpmDigestInit` is safe for all inputs.
-        let raw_p = unsafe { rpmDigestInit(algorithm.into(), 0) };
+        let raw_p = unsafe { qubes_rpm_rpmDigestInit(algorithm.into(), 0) };
         assert!(!raw_p.0.is_null());
         Ok(raw_p)
     }
@@ -80,7 +80,12 @@ impl DigestCtx {
     pub fn update(&mut self, buf: &[u8]) {
         // SAFETY: `self.0` is a pointer to an RPM digest context, and
         // `buf.as_ptr()` points to `buf.len()` bytes of valid memory.
-        unsafe { assert_eq!(rpmDigestUpdate(self.0, buf.as_ptr() as _, buf.len()), 0) }
+        unsafe {
+            assert_eq!(
+                qubes_rpm_rpmDigestUpdate(self.0, buf.as_ptr() as _, buf.len()),
+                0
+            )
+        }
     }
 
     pub fn finalize(self, ascii: bool) -> Vec<u8> {
@@ -93,7 +98,7 @@ impl DigestCtx {
             assert_eq!(
                 // SAFETY: we just forgot `self`, so the destructor will not
                 // free the memory.
-                rpmDigestFinal(this, Some(&mut p), Some(&mut len), ascii as _),
+                qubes_rpm_rpmDigestFinal(this, Some(&mut p), Some(&mut len), ascii as _),
                 0
             );
             assert!(!p.is_null());
@@ -103,7 +108,7 @@ impl DigestCtx {
             ptr::copy_nonoverlapping(p as *const u8, retval.as_mut_ptr(), len);
             // SAFETY: we just initialized the vector.
             retval.set_len(len);
-            // SAFETY: rpmDigestFinal() allocates the memory with `malloc`
+            // SAFETY: qubes_rpm_rpmDigestFinal() allocates the memory with `malloc`
             free(p);
             retval
         }

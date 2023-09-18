@@ -22,6 +22,10 @@ pub struct Signature {
 
 use crate::init::grab_mutex;
 pub use crate::init::{init, InitToken};
+extern "C" {
+    pub fn qubes_rpm_rpmTagGetType(a: std::os::raw::c_uint) -> std::os::raw::c_uint;
+    pub fn qubes_rpm_rpmTagTypeGetClass(a: std::os::raw::c_uint) -> std::os::raw::c_uint;
+}
 
 mod init {
     use std;
@@ -60,18 +64,18 @@ mod init {
         static RPM_CRYPTO_INIT_ONCE: Once = ONCE_INIT;
         use std::os::raw::{c_char, c_int, c_void};
         use std::ptr;
-        #[link(name = "rpm")]
+        #[link(name = "qubes-rpm-lib")]
         extern "C" {
-            fn rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
+            fn qubes_rpm_rpmReadConfigFiles(file: *const c_char, target: *const c_char) -> c_int;
         }
         #[link(name = "c")]
         extern "C" {
             fn abort() -> !;
             fn atexit(_: unsafe extern "C" fn()) -> c_int;
         }
-        #[link(name = "rpmio")]
+        #[link(name = "qubes-rpm-lib")]
         extern "C" {
-            fn rpmPushMacro(
+            fn qubes_rpm_rpmPushMacro(
                 mc: *mut c_void,
                 n: *const c_char,
                 o: *const c_char,
@@ -85,10 +89,10 @@ mod init {
         RPM_CRYPTO_INIT_ONCE.call_once(|| unsafe {
             // SAFETY: this is synchronized by call_once()
             GLOBAL_MUTEX = Box::into_raw(Box::new(std::sync::Mutex::new(())));
-            assert_eq!(rpmReadConfigFiles(ptr::null(), ptr::null()), 0);
+            assert_eq!(qubes_rpm_rpmReadConfigFiles(ptr::null(), ptr::null()), 0);
             if let Some(path) = path {
                 assert_eq!(
-                    rpmPushMacro(
+                    qubes_rpm_rpmPushMacro(
                         ptr::null_mut(),
                         b"_dbpath\0".as_ptr() as _,
                         ptr::null(),

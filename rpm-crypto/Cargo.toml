@@ -4,6 +4,10 @@ version = "0.2.2"
 authors = ["Demi Marie Obenour <demi@invisiblethingslab.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
+links = "qubes-rpm-lib"
 
 [dependencies]
 openpgp-parser = { version = "0.2.2", path = "../openpgp-parser" }
+
+[build-dependencies]
+cc = "1.0"

@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 rpm-parser = { version = "0.2.2", path = "../rpm-parser" }
 rpm-crypto = { version = "0.2.2", path = "../rpm-crypto" }
 openpgp-parser = { version = "0.2.2", path = "../openpgp-parser" }
+libc = "0.2"
 
 [features]
 bin = []

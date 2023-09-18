@@ -8,9 +8,12 @@ Vcs-Git: https://github.com/QubesOS/qubes-rpm-oxide.git
 Build-Depends:
  rustc,
  cargo,
+ rpm,
  librpm-dev,
  debhelper,
  debhelper-compat (= 12),
+ librust-cc-dev,
+ librust-libc-dev,
 Description: RPM canonicalization and verification tools
 
 Package: qubes-rpm-oxide

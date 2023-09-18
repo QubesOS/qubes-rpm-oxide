@@ -1,15 +1,28 @@
 #!/usr/bin/make -f
 
-export RUSTFLAGS=-Cdebuginfo=2 -Clink-arg=-z,relro,-z,now --remap-path-prefix=$(PWD)=.
+export RUSTFLAGS=-Cdebuginfo=2 -Clink-arg=-Wl,-z,relro,-z,now --remap-path-prefix=$(PWD)=.
 export RUSTC_BOOTSTRAP=1
 
 override_dh_auto_build:
-	cargo build --all-features --release --offline
+	cargo -Zunstable-options \
+		'--config=source.system.directory="/usr/share/cargo/registry"' \
+		'--config=source.crates-io.replace-with="system"' \
+		--offline \
+		build --all-features --release
+
+override_dh_auto_test:
+	cargo -Zunstable-options \
+		'--config=source.system.directory="/usr/share/cargo/registry"' \
+		'--config=source.crates-io.replace-with="system"' \
+		--offline \
+		test --all-features --release
 
 override_dh_auto_install:
 	dh_auto_install
 	install -D -m 0755 -- target/release/rpmcanon \
 		debian/qubes-rpm-oxide/usr/bin/rpmcanon
+	install -D -m 0755 -- target/release/sigparse \
+		debian/qubes-rpm-oxide/usr/bin/sigparse
 
 override_dh_auto_clean:
 	cargo clean

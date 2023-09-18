@@ -2,6 +2,15 @@ host:
   rpm:
     build:
     - rpm-oxide.spec
+vm-bullseye:
+  deb:
+    build: []
+vm-buster:
+  deb:
+    build: []
+vm-centos-stream8:
+  rpm:
+    build: []
 vm:
   rpm:
     build:

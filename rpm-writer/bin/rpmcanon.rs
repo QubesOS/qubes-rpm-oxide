@@ -1,8 +1,4 @@
-#![feature(rustc_private)] // hack hack
-#![feature(libc)]
 #![forbid(ellipsis_inclusive_range_patterns, bare_trait_objects)]
-
-extern crate libc;
 
 use openpgp_parser::AllowWeakHashes;
 use rpm_crypto::transaction::{RpmKeyring, RpmTransactionSet};
