@@ -8,7 +8,6 @@
 
 use openpgp_parser::{AllowWeakHashes, Error};
 
-
 mod digests;
 mod signatures;
 pub mod transaction;
