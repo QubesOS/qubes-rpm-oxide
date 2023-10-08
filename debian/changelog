@@ -1,3 +1,12 @@
+qubes-rpm-oxide (0.2.7-1) unstable; urgency=medium
+
+  [ Demi Marie Obenour ]
+  * Check that i18nstrings are valid and consistent
+  * Run 'cargo fmt'
+  * Use C stubs instead of manual FFI
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Sun, 08 Oct 2023 02:20:33 +0200
+
 qubes-rpm-oxide (0.2.6-1) unstable; urgency=medium
 
   [ Marek Marczykowski-Górecki ]
