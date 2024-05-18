@@ -29,8 +29,7 @@ BuildRequires:  rpm-devel >= 4.14.2.1-4
 BuildRequires:  rust-debugger-common
 BuildRequires:  rust-cc-devel
 BuildRequires:  rust-libc-devel
-%define qubes_cargo RUSTFLAGS='-Cdebuginfo=2 -Clink-arg=-Wl,-z,relro,-z,now' \\\
-   cargo '--config=source.system.directory="/usr/share/cargo/registry"' \\\
+%define qubes_cargo cargo '--config=source.system.directory="/usr/share/cargo/registry"' \\\
          '--config=source.crates-io.replace-with="system"' \\\
          --offline
 
@@ -43,10 +42,13 @@ RPM canonicalization and verification tools
 
 %prep
 %setup -q
+
 %build
+%set_build_flags
 %qubes_cargo build --all-features --release
 
 %check
+%set_build_flags
 %qubes_cargo test --all-features --release
 
 %install
