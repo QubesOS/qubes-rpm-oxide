@@ -1,3 +1,10 @@
+qubes-rpm-oxide (0.2.8-1) unstable; urgency=medium
+
+  [ Frédéric Pierret (fepitre) ]
+  * Fix issue in finding debugsymbols for Fedora 41
+
+ -- Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>  Mon, 27 May 2024 15:27:15 +0200
+
 qubes-rpm-oxide (0.2.7-1) unstable; urgency=medium
 
   [ Demi Marie Obenour ]
