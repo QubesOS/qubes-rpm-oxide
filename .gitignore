@@ -1,3 +1,7 @@
 /target
-Cargo.lock
+/Cargo.lock
+/openpgp-parser/Cargo.lock
+/rpm-crypto/Cargo.lock
+/rpm-parser/Cargo.lock
+/rpm-writer/Cargo.lock
 /pkgs

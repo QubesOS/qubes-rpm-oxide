@@ -1,0 +1,47 @@
+# The Qubes OS Project, https://www.qubes-os.org
+# Maintainer: Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+
+pkgname=(qubes-rpm-oxide)
+pkgver=@VERSION@
+pkgrel=@REL@
+pkgdesc="RPM Canonicalization"
+arch=("x86_64")
+url="http://qubes-os.org/"
+license=('MIT OR Apache-2.0')
+depends=(gcc-libs rpm-tools glibc)
+makedepends=(
+  cargo
+  rpm-tools
+)
+# LTO is incompatible with rpm-crypto/ffi.c, disable it for now
+options=("!lto")
+
+_pkgnvr="${pkgname}-${pkgver}-${pkgrel}"
+source=("${_pkgnvr}.tar.gz")
+sha256sums=(SKIP)
+
+prepare() {
+    cd "${_pkgnvr}"
+    export RUSTUP_TOOLCHAIN=stable
+    mv archlinux/Cargo.lock ./
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "${_pkgnvr}"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "${_pkgnvr}"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --all-features
+}
+
+package() {
+    cd "${_pkgnvr}"
+    install -D -m 0755 -t "$pkgdir/usr/bin/" target/release/rpmcanon
+    install -D -m 0755 -t "$pkgdir/usr/bin/" target/release/sigparse
+}
